@@ -1,6 +1,6 @@
 """
-TRADE BOT v4.1 — Main Entry Point
-Fix: Periodic update thread sync issue fixed
+TRADE BOT v4.2 — Main Entry Point
+Fix: Cooldown after trade + Weekly filter + Clean updates
 """
 
 import threading
@@ -38,28 +38,36 @@ TIMEFRAMES = {
     "1h":  0.20,
 }
 
-DECISION_SCAN   = 300
-OUTPUT_FILE     = "decision_output.txt"
-LOG_FILE        = "decision_log.json"
-BUY_THRESHOLD   =  0.25
-SELL_THRESHOLD  = -0.25
-FVG_LOOKBACK    = 50
-MIN_FVG_SIZE    = 0.05
+DECISION_SCAN    = 300
+OUTPUT_FILE      = "decision_output.txt"
+LOG_FILE         = "decision_log.json"
+BUY_THRESHOLD    =  0.25
+SELL_THRESHOLD   = -0.25
+FVG_LOOKBACK     = 50
+MIN_FVG_SIZE     = 0.05
 
-BOT_TOKEN       = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
-CHAT_ID         = "7102976298"
-CAPITAL         = 10000
-RISK_PERCENT    = 5
-LEVERAGE        = 5
-STOP_LOSS_PCT   = 0.8
-TAKE_PROFIT_PCT = 0.8
-MIN_CONFIDENCE  = 50
+BOT_TOKEN        = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
+CHAT_ID          = "7102976298"
+CAPITAL          = 10000
+RISK_PERCENT     = 5
+LEVERAGE         = 5
+STOP_LOSS_PCT    = 0.8
+TAKE_PROFIT_PCT  = 0.8
+MIN_CONFIDENCE   = 50
+EXECUTE_SCAN     = 10
 
-TRAILING_STOP   = True
-TRAIL_TRIGGER   = 0.4
-TRAIL_OFFSET    = 0.3
+# Trailing Stop Loss
+TRAILING_STOP    = True
+TRAIL_TRIGGER    = 0.4
+TRAIL_OFFSET     = 0.3
 
-UPDATE_INTERVAL  = 1800
+# Periodic Update
+UPDATE_INTERVAL  = 1800   # 30 min
+
+# Cooldown after trade close
+COOLDOWN         = 900    # 15 min
+
+# Minimum score
 MIN_SCORE_POINTS = 6
 
 
@@ -373,7 +381,7 @@ trade_state = {
 
 
 # ─────────────────────────────────────────────
-#  PERIODIC UPDATE — FIXED
+#  PERIODIC UPDATE
 # ─────────────────────────────────────────────
 def run_periodic_update():
     time.sleep(UPDATE_INTERVAL)
@@ -382,8 +390,6 @@ def run_periodic_update():
             now          = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             position     = trade_state["position"]
             price        = trade_state["last_price"]
-            signal       = trade_state["last_signal"]
-            conf         = trade_state["last_conf"]
             capital      = trade_state["capital"]
             points       = trade_state["last_points"]
 
@@ -424,7 +430,6 @@ def run_periodic_update():
                     f"--------------------\n"
                     f"TP           : {tp:.2f} ({tp_dist:.2f}% door)\n"
                     f"SL           : {sl:.2f} ({sl_dist:.2f}% door)\n"
-                    f"Signal       : {signal} ({conf}%)\n"
                     f"Score        : {points}/8"
                 )
 
@@ -434,7 +439,6 @@ def run_periodic_update():
                     f"--- MARKET UPDATE ---\n"
                     f"Time    : {now}\n"
                     f"Price   : {price:.2f}\n"
-                    f"Signal  : {signal} ({conf}%)\n"
                     f"Score   : {points}/8\n"
                     f"Capital : {capital:.2f} USDT\n"
                     f"Status  : Next entry ka wait...\n"
@@ -451,7 +455,7 @@ def run_periodic_update():
 # ─────────────────────────────────────────────
 def run_decision_engine():
     exchange = get_exchange()
-    print("[DECISION] Engine v4.1 started")
+    print("[DECISION] Engine v4.2 started")
     while True:
         try:
             scan_time   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -537,6 +541,7 @@ def run_execution_engine():
     sl_price     = 0.0
     tp_price     = 0.0
     capital_used = 0.0
+    cooldown_end = None   # Trade close ke baad cooldown
 
     print("[EXECUTE] Waiting for first decision signal...")
     while True:
@@ -553,12 +558,13 @@ def run_execution_engine():
 
     print("[EXECUTE] Engine started")
     send_telegram(
-        f"TRADE BOT v4.1 STARTED\n"
+        f"TRADE BOT v4.2 STARTED\n"
         f"Capital  : {capital} USDT\n"
         f"Symbol   : {SYMBOL}\n"
         f"Mode     : Paper Trading\n"
         f"Edge     : Weekly+Daily+4H+FVG\n"
-        f"Min Score: {MIN_SCORE_POINTS}/8"
+        f"Min Score: {MIN_SCORE_POINTS}/8\n"
+        f"Cooldown : {COOLDOWN//60} min after trade"
     )
 
     while True:
@@ -628,10 +634,19 @@ def run_execution_engine():
                     sl_price     = 0.0
                     tp_price     = 0.0
                     capital_used = 0.0
+                    cooldown_end = time.time() + COOLDOWN
                     trade_state["position"]     = None
                     trade_state["capital_used"] = 0.0
+                    print(f"[COOLDOWN] {COOLDOWN//60} min wait shuru...")
                     time.sleep(EXECUTE_SCAN)
                     continue
+
+            # Cooldown check
+            if cooldown_end is not None and time.time() < cooldown_end:
+                remaining = int((cooldown_end - time.time()) / 60)
+                print(f"[{now}] Cooldown chal raha hai — {remaining} min baaki")
+                time.sleep(EXECUTE_SCAN)
+                continue
 
             # Entry check
             if position is None:
@@ -642,6 +657,7 @@ def run_execution_engine():
                     entry_price  = current_price
                     entry_time   = datetime.now()
                     position     = signal
+                    cooldown_end = None
                     if signal == "BUY":
                         sl_price = entry_price * (1 - STOP_LOSS_PCT / 100)
                         tp_price = entry_price * (1 + TAKE_PROFIT_PCT / 100)
@@ -663,10 +679,7 @@ def run_execution_engine():
                         f"Reason       : {reason[:300]}"
                     )
                 else:
-                    if signal == "WAIT":
-                        print(f"[{now}] Price={current_price:.2f} | WAIT | Score={int(score)}/8")
-                    else:
-                        print(f"[{now}] Price={current_price:.2f} | Conf {confidence}% < {MIN_CONFIDENCE}% — skip")
+                    print(f"[{now}] Price={current_price:.2f} | WAIT | Score={int(score)}/8")
 
             # Hold / Flip
             else:
@@ -685,31 +698,20 @@ def run_execution_engine():
                         f"Capital      : {capital:.2f} USDT\n"
                         f"Time         : {duration}"
                     )
-                    risk_amount  = capital * (RISK_PERCENT / 100)
-                    capital_used = risk_amount * LEVERAGE
-                    pos_size     = capital_used / current_price
-                    entry_price  = current_price
-                    entry_time   = datetime.now()
-                    position     = signal
-                    if signal == "BUY":
-                        sl_price = entry_price * (1 - STOP_LOSS_PCT / 100)
-                        tp_price = entry_price * (1 + TAKE_PROFIT_PCT / 100)
-                    else:
-                        sl_price = entry_price * (1 + STOP_LOSS_PCT / 100)
-                        tp_price = entry_price * (1 - TAKE_PROFIT_PCT / 100)
-                    print(f"[EXECUTE] REVERSED -> {position} | Entry={entry_price:.2f}")
-                    send_telegram(
-                        f"TRADE REVERSED\n"
-                        f"New Side     : {position}\n"
-                        f"Entry        : {entry_price:.2f}\n"
-                        f"SL           : {sl_price:.2f}\n"
-                        f"TP           : {tp_price:.2f}\n"
-                        f"Capital Used : {capital_used:.2f} USDT\n"
-                        f"Conf         : {confidence}%"
-                    )
+                    position     = None
+                    entry_price  = 0.0
+                    entry_time   = None
+                    pos_size     = 0.0
+                    sl_price     = 0.0
+                    tp_price     = 0.0
+                    capital_used = 0.0
+                    cooldown_end = time.time() + COOLDOWN
+                    trade_state["position"]     = None
+                    trade_state["capital_used"] = 0.0
+                    print(f"[COOLDOWN] Signal flip — {COOLDOWN//60} min wait...")
                 else:
                     pnl_now = calc_pnl(position, entry_price, current_price, pos_size)
-                    print(f"[{now}] Price={current_price:.2f} | {signal} | Conf={confidence}% | Holding {position} | PnL={pnl_now:+.2f} USDT")
+                    print(f"[{now}] Price={current_price:.2f} | Holding {position} | PnL={pnl_now:+.2f} USDT")
 
         except Exception as e:
             print(f"[EXECUTE ERROR] {e}")
@@ -722,8 +724,8 @@ def run_execution_engine():
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     print("=" * 55)
-    print("  TRADE BOT v4.1 STARTING...")
-    print("  Edge: Weekly+Daily+4H+FVG+KeyLevels")
+    print("  TRADE BOT v4.2 STARTING...")
+    print("  Edge: Weekly+Daily+4H+FVG+Cooldown")
     print("=" * 55)
 
     t1 = threading.Thread(target=run_server)
