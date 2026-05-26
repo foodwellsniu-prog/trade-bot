@@ -41,7 +41,7 @@ API_SECRET       = ""
 BOT_TOKEN        = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
 CHAT_ID          = "7102976298"
 
-CAPITAL          = 100.0
+CAPITAL          = 115.1
 CAPITAL_USE_PCT  = 90
 LEVERAGE         = 10
 MIN_SCORE        = 6
