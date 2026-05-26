@@ -6,6 +6,7 @@ Min Score : 6/8
 Capital   : 90% per trade
 TP Zone   : 70-90% early exit
 Max Hold  : 3 min base + Smart Extension
+Dynamic RR: Score Based
 """
 
 import threading
@@ -21,7 +22,9 @@ def home():
     return "Scalping Bot v3.0 Smart Max Hold Running!"
 
 def run_server():
-    app.run(host='0.0.0.0', port=8081)
+    import os
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
 
 import ccxt
@@ -41,7 +44,7 @@ API_SECRET       = ""
 BOT_TOKEN        = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
 CHAT_ID          = "7102976298"
 
-CAPITAL          = 115
+CAPITAL          = 100.0
 CAPITAL_USE_PCT  = 90
 LEVERAGE         = 10
 MIN_SCORE        = 6
@@ -52,25 +55,21 @@ DECISION_SCAN    = 60
 COOLDOWN         = 60
 
 # Max Hold — Smart Logic
-# Max Hold — Smart Logic
-MAX_HOLD_SECONDS   = 180    # 3 min base
-MAX_HOLD_EXTENSION = 140    # 2m20s extra per extension
-HOLD_SCORE_MINIMUM = 7      # 7/10 = hold karo
-MAX_EXTENSIONS     = 3      # Max 3 baar extend
-                             # Total = 3+2.3+2.3+2.3 = 10 min
+MAX_HOLD_SECONDS   = 180
+MAX_HOLD_EXTENSION = 140
+HOLD_SCORE_MINIMUM = 7
+MAX_EXTENSIONS     = 3
 
 ATR_PERIOD       = 7
+
 # Dynamic RR — Score Based
-# Score 6/8 = Conservative 1:1.5
-# Score 7/8 = Moderate     1:2
-# Score 8/8 = Aggressive   1:3
 RR_CONFIG = {
     6: {"sl_mult": 1.0, "tp_mult": 1.5},
     7: {"sl_mult": 1.0, "tp_mult": 2.0},
     8: {"sl_mult": 0.8, "tp_mult": 2.5},
 }
-RR_DEFAULT_SL = 1.0   # Fallback
-RR_DEFAULT_TP = 1.5   # Fallback
+RR_DEFAULT_SL = 1.0
+RR_DEFAULT_TP = 1.5
 
 # TP Early Exit
 TP_EXIT_MIN_PCT   = 0.70
@@ -132,6 +131,13 @@ def load_capital():
             print(f"[CAPITAL] Loaded: {cap} USDT")
             return cap
     except:
+        import os
+        env_cap = os.environ.get("INITIAL_CAPITAL")
+        if env_cap:
+            cap = float(env_cap)
+            print(f"[CAPITAL] Env se loaded: {cap} USDT")
+            save_capital(cap)
+            return cap
         print(f"[CAPITAL] Default {CAPITAL} USDT")
         return CAPITAL
 
@@ -173,7 +179,8 @@ def save_trade_history(side, entry, exit_price, pnl,
                        capital, duration, label):
     try:
         try:
-            with open(TRADE_HISTORY, "r", encoding="utf-8") as f:
+            with open(TRADE_HISTORY, "r",
+                      encoding="utf-8") as f:
                 history = json.load(f)
         except:
             history = []
@@ -189,7 +196,8 @@ def save_trade_history(side, entry, exit_price, pnl,
             "result":   "WIN" if pnl > 0 else "LOSS",
             "label":    label,
         })
-        with open(TRADE_HISTORY, "w", encoding="utf-8") as f:
+        with open(TRADE_HISTORY, "w",
+                  encoding="utf-8") as f:
             json.dump(history, f, indent=2)
     except Exception as e:
         print(f"[HISTORY ERROR] {e}")
@@ -197,7 +205,8 @@ def save_trade_history(side, entry, exit_price, pnl,
 
 def get_daily_stats():
     try:
-        with open(TRADE_HISTORY, "r", encoding="utf-8") as f:
+        with open(TRADE_HISTORY, "r",
+                  encoding="utf-8") as f:
             history = json.load(f)
     except:
         return None
@@ -206,9 +215,10 @@ def get_daily_stats():
     if not trades:
         return None
     total     = len(trades)
-    wins      = len([t for t in trades if t["result"] == "WIN"])
+    wins      = len([t for t in trades
+                     if t["result"] == "WIN"])
     losses    = total - wins
-    win_rate  = round((wins / total) * 100, 1) if total > 0 else 0
+    win_rate  = round((wins / total) * 100, 1)
     daily_pnl = round(sum(t["pnl"] for t in trades), 4)
     best      = round(max(t["pnl"] for t in trades), 4)
     worst     = round(min(t["pnl"] for t in trades), 4)
@@ -222,16 +232,18 @@ def get_daily_stats():
 
 def get_overall_stats():
     try:
-        with open(TRADE_HISTORY, "r", encoding="utf-8") as f:
+        with open(TRADE_HISTORY, "r",
+                  encoding="utf-8") as f:
             history = json.load(f)
     except:
         return None
     if not history:
         return None
     total     = len(history)
-    wins      = len([t for t in history if t["result"] == "WIN"])
+    wins      = len([t for t in history
+                     if t["result"] == "WIN"])
     losses    = total - wins
-    win_rate  = round((wins / total) * 100, 1) if total > 0 else 0
+    win_rate  = round((wins / total) * 100, 1)
     total_pnl = round(sum(t["pnl"] for t in history), 4)
     return {
         "total": total, "wins": wins, "losses": losses,
@@ -258,7 +270,7 @@ def get_exchange():
             print("[INFO] Binance USDT-M Futures connected")
             return ex
         except Exception as e:
-            print(f"[RECONNECT] Exchange connect fail: {e}")
+            print(f"[RECONNECT] Fail: {e}")
             print("[RECONNECT] 30s baad retry...")
             time.sleep(30)
 
@@ -271,7 +283,7 @@ def safe_fetch_ticker(ex, symbol, retries=3):
         except Exception as e:
             if "429" in str(e) or "Too Many" in str(e):
                 wait = (i + 1) * 30
-                print(f"[RATE LIMIT] Ticker wait {wait}s...")
+                print(f"[RATE LIMIT] Ticker {wait}s...")
                 time.sleep(wait)
             else:
                 print(f"[TICKER ERROR] {e}")
@@ -288,7 +300,7 @@ def safe_fetch_ohlcv(ex, symbol, tf, limit, retries=3):
         except Exception as e:
             if "429" in str(e) or "Too Many" in str(e):
                 wait = (i + 1) * 30
-                print(f"[RATE LIMIT] {tf} wait {wait}s...")
+                print(f"[RATE LIMIT] {tf} {wait}s...")
                 time.sleep(wait)
             else:
                 print(f"[OHLCV ERROR] {tf}: {e}")
@@ -304,7 +316,7 @@ def safe_fetch_orderbook(ex, symbol, retries=3):
         except Exception as e:
             if "429" in str(e) or "Too Many" in str(e):
                 wait = (i + 1) * 30
-                print(f"[RATE LIMIT] OB wait {wait}s...")
+                print(f"[RATE LIMIT] OB {wait}s...")
                 time.sleep(wait)
             else:
                 print(f"[OB ERROR] {e}")
@@ -316,7 +328,8 @@ def safe_fetch_orderbook(ex, symbol, retries=3):
 #  TELEGRAM
 # ─────────────────────────────────────────────
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    url = (f"https://api.telegram.org/bot"
+           f"{BOT_TOKEN}/sendMessage")
     for attempt in range(3):
         try:
             r = requests.post(
@@ -330,7 +343,7 @@ def send_telegram(message):
             if r.status_code == 200:
                 return
         except Exception as e:
-            print(f"[TELEGRAM] attempt {attempt+1}/3: {e}")
+            print(f"[TELEGRAM] {attempt+1}/3: {e}")
             time.sleep(3)
     print("[TELEGRAM] Message send nahi hua")
 
@@ -347,8 +360,7 @@ def check_spread(ex, symbol):
         ask = ob["asks"][0][0]
         spread_pct = ((ask - bid) / bid) * 100
         if spread_pct > MAX_SPREAD_PCT:
-            print(f"[SPREAD] Too high: "
-                  f"{spread_pct:.4f}% > {MAX_SPREAD_PCT}%")
+            print(f"[SPREAD] High: {spread_pct:.4f}%")
             return False
         print(f"[SPREAD] OK: {spread_pct:.4f}%")
         return True
@@ -410,9 +422,11 @@ def calc_atr(df, period=7):
         tr1   = high - low
         tr2   = (high - close.shift(1)).abs()
         tr3   = (low  - close.shift(1)).abs()
-        tr    = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        tr    = pd.concat(
+            [tr1, tr2, tr3], axis=1).max(axis=1)
         return float(
-            tr.ewm(span=period, adjust=False).mean().iloc[-1])
+            tr.ewm(span=period,
+                   adjust=False).mean().iloc[-1])
     except:
         return 0.0
 
@@ -428,10 +442,10 @@ def detect_structure(df, swing_bars=2):
         swing_highs, swing_lows = [], []
         for i in range(swing_bars, n - swing_bars):
             if highs[i] == max(
-                    highs[i - swing_bars: i + swing_bars + 1]):
+                    highs[i-swing_bars:i+swing_bars+1]):
                 swing_highs.append(highs[i])
             if lows[i] == min(
-                    lows[i - swing_bars: i + swing_bars + 1]):
+                    lows[i-swing_bars:i+swing_bars+1]):
                 swing_lows.append(lows[i])
         if len(swing_highs) < 2 or len(swing_lows) < 2:
             return "RANGE"
@@ -451,7 +465,8 @@ def detect_structure(df, swing_bars=2):
 # ─────────────────────────────────────────────
 def detect_order_blocks(df, lookback=40):
     try:
-        recent        = df.tail(lookback).reset_index(drop=True)
+        recent        = df.tail(lookback).reset_index(
+            drop=True)
         n             = len(recent)
         current_price = recent["close"].iloc[-1]
         bullish_obs   = []
@@ -460,10 +475,9 @@ def detect_order_blocks(df, lookback=40):
         for i in range(1, n - 1):
             curr  = recent.iloc[i]
             next_ = recent.iloc[i + 1]
-
             curr_body = abs(curr["close"] - curr["open"])
-            next_body = abs(next_["close"] - next_["open"])
-
+            next_body = abs(
+                next_["close"] - next_["open"])
             if curr_body == 0:
                 continue
 
@@ -525,10 +539,10 @@ def detect_liquidity(df, lookback=40):
 
         for i in range(swing_bars, n - swing_bars):
             if highs[i] == max(
-                    highs[i - swing_bars: i + swing_bars + 1]):
+                    highs[i-swing_bars:i+swing_bars+1]):
                 buy_liq.append(highs[i])
             if lows[i] == min(
-                    lows[i - swing_bars: i + swing_bars + 1]):
+                    lows[i-swing_bars:i+swing_bars+1]):
                 sell_liq.append(lows[i])
 
         buy_swept  = False
@@ -538,16 +552,20 @@ def detect_liquidity(df, lookback=40):
             last_high = buy_liq[-1]
             recent_5  = df.tail(5)
             tolerance = last_high * 0.002
-            if (any(recent_5["high"] > last_high - tolerance) and
-                    current_price < last_high + tolerance):
+            if (any(recent_5["high"] >
+                    last_high - tolerance) and
+                    current_price <
+                    last_high + tolerance):
                 buy_swept = True
 
         if sell_liq:
             last_low  = sell_liq[-1]
             recent_5  = df.tail(5)
             tolerance = last_low * 0.002
-            if (any(recent_5["low"] < last_low + tolerance) and
-                    current_price > last_low - tolerance):
+            if (any(recent_5["low"] <
+                    last_low + tolerance) and
+                    current_price >
+                    last_low - tolerance):
                 sell_swept = True
 
         return {
@@ -569,7 +587,8 @@ def detect_liquidity(df, lookback=40):
 def detect_fvg(df, lookback=30):
     try:
         fvgs          = []
-        recent        = df.tail(lookback).reset_index(drop=True)
+        recent        = df.tail(lookback).reset_index(
+            drop=True)
         n             = len(recent)
         current_price = recent["close"].iloc[-1]
 
@@ -581,7 +600,8 @@ def detect_fvg(df, lookback=30):
                 gap_size = ((c3["low"] - c1["high"]) /
                             c1["high"]) * 100
                 if gap_size >= 0.02:
-                    tolerance = (c3["low"] - c1["high"]) * 0.3
+                    tolerance = (
+                        c3["low"] - c1["high"]) * 0.3
                     fvgs.append({
                         "type":   "BULL",
                         "top":    round(c3["low"], 4),
@@ -597,7 +617,8 @@ def detect_fvg(df, lookback=30):
                 gap_size = ((c1["low"] - c3["high"]) /
                             c3["high"]) * 100
                 if gap_size >= 0.02:
-                    tolerance = (c1["low"] - c3["high"]) * 0.3
+                    tolerance = (
+                        c1["low"] - c3["high"]) * 0.3
                     fvgs.append({
                         "type":   "BEAR",
                         "top":    round(c1["low"], 4),
@@ -608,7 +629,6 @@ def detect_fvg(df, lookback=30):
                                    <= current_price
                                    <= c1["low"] + tolerance),
                     })
-
         return fvgs
     except:
         return []
@@ -618,12 +638,6 @@ def detect_fvg(df, lookback=30):
 #  QUICK MARKET SCAN — Loss Hold Decision
 # ─────────────────────────────────────────────
 def quick_market_scan(ex, symbol, position):
-    """
-    Jab trade loss mai ho aur 3 min ho jayein
-    Market ko scan karo aur 10 mai se rate karo
-    7+  = Hold karo
-    6-  = Close karo
-    """
     try:
         score   = 0
         reasons = []
@@ -632,46 +646,50 @@ def quick_market_scan(ex, symbol, position):
         bars_5m = safe_fetch_ohlcv(ex, symbol, "5m", 50)
 
         if bars_1m is None or bars_5m is None:
-            print("[QUICK SCAN] Data nahi mila — close karo")
+            print("[QUICK SCAN] Data nahi mila")
             return 0, ["Data fetch fail — close"]
 
         df_1m = pd.DataFrame(
             bars_1m,
-            columns=["time","open","high","low","close","volume"])
+            columns=["time","open","high",
+                     "low","close","volume"])
         df_5m = pd.DataFrame(
             bars_5m,
-            columns=["time","open","high","low","close","volume"])
+            columns=["time","open","high",
+                     "low","close","volume"])
 
-        # ── Check 1: 5m Structure (2 pts) ────
+        # Check 1: 5m Structure (2 pts)
         structure_5m = detect_structure(df_5m)
         if position == "BUY" and structure_5m == "BULL":
             score += 2
             reasons.append("5m BULL (+2)")
-        elif position == "SELL" and structure_5m == "BEAR":
+        elif (position == "SELL" and
+              structure_5m == "BEAR"):
             score += 2
             reasons.append("5m BEAR (+2)")
         else:
-            reasons.append(f"5m {structure_5m} weak (0)")
+            reasons.append(f"5m {structure_5m} (0)")
 
-        # ── Check 2: 1m Structure (2 pts) ────
+        # Check 2: 1m Structure (2 pts)
         structure_1m = detect_structure(df_1m)
         if position == "BUY" and structure_1m == "BULL":
             score += 2
-            reasons.append("1m BULL confirm (+2)")
-        elif position == "SELL" and structure_1m == "BEAR":
+            reasons.append("1m BULL (+2)")
+        elif (position == "SELL" and
+              structure_1m == "BEAR"):
             score += 2
-            reasons.append("1m BEAR confirm (+2)")
+            reasons.append("1m BEAR (+2)")
         else:
-            reasons.append(f"1m {structure_1m} weak (0)")
+            reasons.append(f"1m {structure_1m} (0)")
 
-        # ── Check 3: Order Block (2 pts) ─────
+        # Check 3: Order Block (2 pts)
         obs = detect_order_blocks(df_1m)
         if position == "BUY":
             ob_hit = [o for o in obs["bullish_obs"]
                       if o["price_in_ob"]]
             if ob_hit:
                 score += 2
-                reasons.append("Bullish OB active (+2)")
+                reasons.append("Bullish OB (+2)")
             else:
                 reasons.append("No Bullish OB (0)")
         else:
@@ -679,67 +697,67 @@ def quick_market_scan(ex, symbol, position):
                       if o["price_in_ob"]]
             if ob_hit:
                 score += 2
-                reasons.append("Bearish OB active (+2)")
+                reasons.append("Bearish OB (+2)")
             else:
                 reasons.append("No Bearish OB (0)")
 
-        # ── Check 4: Volume (2 pts) ───────────
+        # Check 4: Volume (2 pts)
         avg_vol   = df_1m["volume"].tail(20).mean()
         last_vol  = df_1m["volume"].iloc[-1]
-        vol_ratio = last_vol / avg_vol if avg_vol > 0 else 0
-
+        vol_ratio = (last_vol / avg_vol
+                     if avg_vol > 0 else 0)
         if vol_ratio >= 1.5:
             score += 2
-            reasons.append(f"Volume strong {vol_ratio:.1f}x (+2)")
+            reasons.append(
+                f"Volume {vol_ratio:.1f}x (+2)")
         elif vol_ratio >= 1.0:
             score += 1
-            reasons.append(f"Volume ok {vol_ratio:.1f}x (+1)")
+            reasons.append(
+                f"Volume {vol_ratio:.1f}x (+1)")
         else:
-            reasons.append(f"Volume weak {vol_ratio:.1f}x (0)")
+            reasons.append(
+                f"Volume {vol_ratio:.1f}x (0)")
 
-        # ── Check 5: Momentum (2 pts) ─────────
+        # Check 5: Momentum (2 pts)
         closes = df_1m["close"].tail(5).values
         if position == "BUY":
             going_up = sum(
                 1 for i in range(1, len(closes))
-                if closes[i] > closes[i - 1]
-            )
+                if closes[i] > closes[i-1])
             if going_up >= 4:
                 score += 2
                 reasons.append(
-                    f"Strong UP momentum {going_up}/4 (+2)")
+                    f"UP momentum {going_up}/4 (+2)")
             elif going_up >= 3:
                 score += 1
                 reasons.append(
-                    f"Weak UP momentum {going_up}/4 (+1)")
+                    f"UP momentum {going_up}/4 (+1)")
             else:
                 reasons.append(
-                    f"No UP momentum {going_up}/4 (0)")
+                    f"UP momentum {going_up}/4 (0)")
         else:
             going_down = sum(
                 1 for i in range(1, len(closes))
-                if closes[i] < closes[i - 1]
-            )
+                if closes[i] < closes[i-1])
             if going_down >= 4:
                 score += 2
                 reasons.append(
-                    f"Strong DOWN momentum {going_down}/4 (+2)")
+                    f"DOWN momentum {going_down}/4 (+2)")
             elif going_down >= 3:
                 score += 1
                 reasons.append(
-                    f"Weak DOWN momentum {going_down}/4 (+1)")
+                    f"DOWN momentum {going_down}/4 (+1)")
             else:
                 reasons.append(
-                    f"No DOWN momentum {going_down}/4 (0)")
+                    f"DOWN momentum {going_down}/4 (0)")
 
         reasons.append(f"Quick Score: {score}/10")
-        print(f"[QUICK SCAN] Score={score}/10 | "
-              f"{' | '.join(reasons)}")
+        print(f"[QUICK SCAN] Score={score}/10")
         return score, reasons
 
     except Exception as e:
         print(f"[QUICK SCAN ERROR] {e}")
-        return 0, [f"Scan error: {e}"]
+        return 0, [f"Error: {e}"]
 
 
 # ─────────────────────────────────────────────
@@ -760,18 +778,20 @@ def smart_money_score(structure_5m, structure_1m,
         direction = "SELL"
         reasons.append("5m BEAR (+2)")
     else:
-        reasons.append("5m RANGE — no direction (0)")
-        reasons.append("Total: 0/8 — RANGE skip")
+        reasons.append("5m RANGE (0)")
+        reasons.append("Total: 0/8 — skip")
         return 0, "WAIT", reasons
 
-    if (direction == "BUY"  and structure_1m == "BULL") or \
-       (direction == "SELL" and structure_1m == "BEAR"):
+    if ((direction == "BUY" and
+         structure_1m == "BULL") or
+            (direction == "SELL" and
+             structure_1m == "BEAR")):
         points += 1
         reasons.append(f"1m confirms {direction} (+1)")
     elif structure_1m == "RANGE":
-        reasons.append("1m RANGE — no confirm (0)")
+        reasons.append("1m RANGE (0)")
     else:
-        reasons.append("1m opposite — weak (0)")
+        reasons.append("1m opposite (0)")
 
     if direction == "BUY":
         ob_hit = [ob for ob in obs["bullish_obs"]
@@ -787,7 +807,7 @@ def smart_money_score(structure_5m, structure_1m,
                 f"{best_ob['bottom']:.2f}-"
                 f"{best_ob['top']:.2f} (+2)")
         else:
-            reasons.append("No Bullish OB hit (0)")
+            reasons.append("No Bullish OB (0)")
     else:
         ob_hit = [ob for ob in obs["bearish_obs"]
                   if ob["price_in_ob"]]
@@ -802,20 +822,21 @@ def smart_money_score(structure_5m, structure_1m,
                 f"{best_ob['bottom']:.2f}-"
                 f"{best_ob['top']:.2f} (+2)")
         else:
-            reasons.append("No Bearish OB hit (0)")
+            reasons.append("No Bearish OB (0)")
 
     if direction == "BUY" and liq["sell_swept"]:
         points += 2
-        reasons.append("Sell liquidity swept (+2)")
+        reasons.append("Sell liq swept (+2)")
     elif direction == "SELL" and liq["buy_swept"]:
         points += 2
-        reasons.append("Buy liquidity swept (+2)")
+        reasons.append("Buy liq swept (+2)")
     else:
-        reasons.append("No liquidity sweep (0)")
+        reasons.append("No liq sweep (0)")
 
     if direction == "BUY":
         bull_fvg = [f for f in fvgs
-                    if f["type"] == "BULL" and f["retest"]]
+                    if f["type"] == "BULL"
+                    and f["retest"]]
         if bull_fvg:
             points += 1
             reasons.append(
@@ -823,10 +844,11 @@ def smart_money_score(structure_5m, structure_1m,
                 f"{bull_fvg[-1]['bottom']:.2f}-"
                 f"{bull_fvg[-1]['top']:.2f} (+1)")
         else:
-            reasons.append("No Bull FVG retest (0)")
+            reasons.append("No Bull FVG (0)")
     else:
         bear_fvg = [f for f in fvgs
-                    if f["type"] == "BEAR" and f["retest"]]
+                    if f["type"] == "BEAR"
+                    and f["retest"]]
         if bear_fvg:
             points += 1
             reasons.append(
@@ -834,7 +856,7 @@ def smart_money_score(structure_5m, structure_1m,
                 f"{bear_fvg[-1]['bottom']:.2f}-"
                 f"{bear_fvg[-1]['top']:.2f} (+1)")
         else:
-            reasons.append("No Bear FVG retest (0)")
+            reasons.append("No Bear FVG (0)")
 
     if not volume_ok:
         reasons.append("Volume weak — caution")
@@ -853,20 +875,13 @@ def calc_pnl(side, entry, exit_price, pos_size):
         return (exit_price - entry) * pos_size
     else:
         return (entry - exit_price) * pos_size
-        
+
+
 # ─────────────────────────────────────────────
 #  DYNAMIC RR — Score Based
 # ─────────────────────────────────────────────
 def get_dynamic_rr(score):
-    """
-    Score ke hisaab se SL aur TP multiplier lo
-
-    Score 6/8 = Conservative = 1:1.5
-    Score 7/8 = Moderate     = 1:2
-    Score 8/8 = Aggressive   = 1:3
-    """
     score = int(score)
-
     if score >= 8:
         sl_mult = RR_CONFIG[8]["sl_mult"]
         tp_mult = RR_CONFIG[8]["tp_mult"]
@@ -883,11 +898,9 @@ def get_dynamic_rr(score):
         sl_mult = RR_DEFAULT_SL
         tp_mult = RR_DEFAULT_TP
         rr_type = "Default 1:1.5"
-
     print(f"[DYNAMIC RR] Score={score}/8 | "
           f"SL={sl_mult}x | TP={tp_mult}x | "
-          f"Type={rr_type}")
-
+          f"{rr_type}")
     return sl_mult, tp_mult, rr_type
 
 
@@ -895,20 +908,20 @@ def get_dynamic_rr(score):
 #  SHARED STATE
 # ─────────────────────────────────────────────
 trade_state = {
-    "position":     None,
-    "entry_price":  0.0,
-    "entry_time":   None,
-    "sl_price":     0.0,
-    "tp_price":     0.0,
-    "pos_size":     0.0,
-    "capital_used": 0.0,
-    "capital":      CAPITAL,
-    "last_signal":  "WAIT",
-    "last_conf":    0,
-    "last_price":   0.0,
-    "last_points":  0,
-    "last_tp_zone": "",
-    "last_session": "",
+    "position":        None,
+    "entry_price":     0.0,
+    "entry_time":      None,
+    "sl_price":        0.0,
+    "tp_price":        0.0,
+    "pos_size":        0.0,
+    "capital_used":    0.0,
+    "capital":         CAPITAL,
+    "last_signal":     "WAIT",
+    "last_conf":       0,
+    "last_price":      0.0,
+    "last_points":     0,
+    "last_tp_zone":    "",
+    "last_session":    "",
     "extension_count": 0,
 }
 
@@ -930,30 +943,32 @@ def run_periodic_update():
     time.sleep(UPDATE_INTERVAL)
     while True:
         try:
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            now = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S")
             with state_lock:
-                position        = trade_state["position"]
-                price           = trade_state["last_price"]
-                capital         = trade_state["capital"]
-                points          = trade_state["last_points"]
-                entry           = trade_state["entry_price"]
-                sl              = trade_state["sl_price"]
-                tp              = trade_state["tp_price"]
-                psize           = trade_state["pos_size"]
-                etime           = trade_state["entry_time"]
-                capital_used    = trade_state["capital_used"]
-                tp_zone         = trade_state["last_tp_zone"]
-                session         = trade_state["last_session"]
-                ext_count       = trade_state["extension_count"]
+                position     = trade_state["position"]
+                price        = trade_state["last_price"]
+                capital      = trade_state["capital"]
+                points       = trade_state["last_points"]
+                entry        = trade_state["entry_price"]
+                sl           = trade_state["sl_price"]
+                tp           = trade_state["tp_price"]
+                psize        = trade_state["pos_size"]
+                etime        = trade_state["entry_time"]
+                tp_zone      = trade_state["last_tp_zone"]
+                session      = trade_state["last_session"]
+                ext_count    = trade_state["extension_count"]
 
             if price == 0:
                 time.sleep(UPDATE_INTERVAL)
                 continue
 
             if position is not None and etime is not None:
-                pnl      = calc_pnl(position, entry, price, psize)
-                dur      = str(datetime.now() - etime).split(".")[0]
-                pnl_icon = "+" if pnl >= 0 else ""
+                pnl  = calc_pnl(position, entry,
+                                price, psize)
+                dur  = str(
+                    datetime.now() - etime).split(".")[0]
+                icon = "+" if pnl >= 0 else ""
 
                 if position == "BUY":
                     tp_dist = ((tp - price) / price) * 100
@@ -962,8 +977,8 @@ def run_periodic_update():
                     tp_dist = ((price - tp) / price) * 100
                     sl_dist = ((sl - price) / price) * 100
 
-                tp_zone_line = (f"\nTP Zone : {tp_zone}"
-                                if tp_zone else "")
+                tp_line  = (f"\nTP Zone : {tp_zone}"
+                            if tp_zone else "")
                 ext_line = (f"\nExt     : {ext_count}/"
                             f"{MAX_EXTENSIONS}"
                             if ext_count > 0 else "")
@@ -975,7 +990,7 @@ def run_periodic_update():
                     f"Side    : {position}\n"
                     f"Entry   : {entry:.2f}\n"
                     f"Price   : {price:.2f}\n"
-                    f"PnL     : {pnl_icon}{pnl:.4f} USDT\n"
+                    f"PnL     : {icon}{pnl:.4f} USDT\n"
                     f"Capital : {capital:.4f} USDT\n"
                     f"Duration: {dur}\n"
                     f"--------------------\n"
@@ -984,8 +999,7 @@ def run_periodic_update():
                     f"SL      : {sl:.2f} "
                     f"({sl_dist:.2f}% door)\n"
                     f"Score   : {points}/8"
-                    f"{tp_zone_line}"
-                    f"{ext_line}"
+                    f"{tp_line}{ext_line}"
                 )
             else:
                 send_telegram(
@@ -995,10 +1009,9 @@ def run_periodic_update():
                     f"Price   : {price:.2f}\n"
                     f"Score   : {points}/8\n"
                     f"Capital : {capital:.4f} USDT\n"
-                    f"Status  : Next scalp ka wait...\n"
+                    f"Status  : Next scalp wait...\n"
                     f"--------------------"
                 )
-
         except Exception as e:
             print(f"[UPDATE ERROR] {e}")
         time.sleep(UPDATE_INTERVAL)
@@ -1024,7 +1037,8 @@ def run_daily_report():
                         f"Win      : {daily['wins']}\n"
                         f"Loss     : {daily['losses']}\n"
                         f"Win Rate : {daily['win_rate']}%\n"
-                        f"PnL      : {daily['pnl']:+.4f} USDT\n"
+                        f"PnL      : "
+                        f"{daily['pnl']:+.4f} USDT\n"
                         f"Capital  : "
                         f"{daily['capital']:.4f} USDT\n"
                         f"Best     : "
@@ -1034,7 +1048,8 @@ def run_daily_report():
                         f"--------------------\n"
                         f"OVERALL:\n"
                         f"Trades   : {overall['total']}\n"
-                        f"Win Rate : {overall['win_rate']}%\n"
+                        f"Win Rate : "
+                        f"{overall['win_rate']}%\n"
                         f"Total PnL: "
                         f"{overall['pnl']:+.4f} USDT\n"
                         f"Capital  : "
@@ -1044,7 +1059,7 @@ def run_daily_report():
                 else:
                     send_telegram(
                         f"--- SCALP DAILY ---\n"
-                        f"Aaj koi scalp trade nahi hua\n"
+                        f"Aaj koi trade nahi hua\n"
                         f"--------------------"
                     )
                 time.sleep(70)
@@ -1058,7 +1073,7 @@ def run_daily_report():
 # ─────────────────────────────────────────────
 def run_decision_engine():
     exchange = get_exchange()
-    print("[SCALP DECISION] v3.0 Smart Max Hold started")
+    print("[SCALP DECISION] v3.0 Started")
 
     while True:
         try:
@@ -1075,8 +1090,7 @@ def run_decision_engine():
                 exchange, SYMBOL, "1m", 100)
 
             if bars_5m is None or bars_1m is None:
-                print("[DECISION] Data fetch fail "
-                      "— reconnecting...")
+                print("[DECISION] Fetch fail — reconnect")
                 exchange = get_exchange()
                 time.sleep(30)
                 continue
@@ -1101,12 +1115,9 @@ def run_decision_engine():
                 df_1m["time"], unit="ms")
 
             current_price = float(df_1m["close"].iloc[-1])
-
             atr_1m = calc_atr(df_1m, ATR_PERIOD)
             atr_5m = calc_atr(df_5m, ATR_PERIOD)
-
-            volume_ok = check_volume(df_1m, VOLUME_MULT)
-
+            volume_ok    = check_volume(df_1m, VOLUME_MULT)
             structure_5m = detect_structure(df_5m)
             structure_1m = detect_structure(df_1m)
             liq          = detect_liquidity(df_1m)
@@ -1122,28 +1133,28 @@ def run_decision_engine():
 
             if points >= MIN_SCORE and direction == "BUY":
                 signal = "BUY"
-            elif points >= MIN_SCORE and direction == "SELL":
+            elif (points >= MIN_SCORE and
+                  direction == "SELL"):
                 signal = "SELL"
             else:
                 signal = "WAIT"
 
-                       if not good_session and signal != "WAIT":
-                # Asian session mai sirf 7/8+ score pe trade
+            # ── Session Filter — Fixed ────────────
+            if not good_session and signal != "WAIT":
                 if points >= 7:
                     print(f"[SESSION] {session_name} "
                           f"— Score {points}/8 HIGH "
-                          f"— Asian session trade allowed")
+                          f"— Asian allowed ✅")
                 else:
                     print(f"[SESSION] {session_name} "
                           f"— Score {points}/8 LOW "
-                          f"— Skip")
+                          f"— Skip ❌")
                     signal = "WAIT"
 
             print(f"[SCALP] {scan_time} | {points}/8 | "
-                  f"{signal} | ATR_1m={atr_1m:.2f} | "
-                  f"ATR_5m={atr_5m:.2f} | "
+                  f"{signal} | ATR={atr_5m:.2f} | "
                   f"Price={current_price:.2f} | "
-                  f"Session={session_name}")
+                  f"{session_name}")
 
             signal_data = {
                 "signal":     signal,
@@ -1181,12 +1192,10 @@ def run_decision_engine():
                 "time":      scan_time,
                 "signal":    signal,
                 "points":    points,
-                "atr_1m":    round(atr_1m, 4),
                 "atr_5m":    round(atr_5m, 4),
                 "price":     current_price,
-                "reasons":   reasons,
-                "volume_ok": volume_ok,
                 "session":   session_name,
+                "volume_ok": volume_ok,
             })
             log = log[-3000:]
             with open(LOG_FILE, "w",
@@ -1197,7 +1206,6 @@ def run_decision_engine():
             print(f"[DECISION ERROR] {e}")
             if ("connection" in str(e).lower() or
                     "timeout" in str(e).lower()):
-                print("[DECISION] Reconnecting...")
                 exchange = get_exchange()
             time.sleep(30)
 
@@ -1205,7 +1213,7 @@ def run_decision_engine():
 
 
 # ─────────────────────────────────────────────
-#  EXECUTION ENGINE — Smart Max Hold
+#  EXECUTION ENGINE
 # ─────────────────────────────────────────────
 def run_execution_engine():
     ex              = get_exchange()
@@ -1218,42 +1226,42 @@ def run_execution_engine():
     tp_price        = 0.0
     capital_used    = 0.0
     cooldown_end    = load_cooldown()
-    extension_count = 0          # Smart Max Hold counter
+    extension_count = 0
+    sl_mult         = RR_DEFAULT_SL
+    tp_mult         = RR_DEFAULT_TP
+    rr_type         = "Default"
 
     print("[SCALP EXECUTE] Waiting for first signal...")
     signal_data = signal_queue.get()
-    print("[SCALP EXECUTE] v3.0 Smart Max Hold started!")
+    print("[SCALP EXECUTE] v3.0 Started!")
 
     send_telegram(
         f"SCALPING BOT v3.0 STARTED\n"
         f"Capital  : {capital:.2f} USDT\n"
         f"Symbol   : {SYMBOL}\n"
         f"Mode     : Paper Trading\n"
-        f"Strategy : Smart Money 24/7\n"
         f"Leverage : {LEVERAGE}x\n"
         f"Capital% : {CAPITAL_USE_PCT}%\n"
         f"Min Score: {MIN_SCORE}/8\n"
-        f"Max Hold : {MAX_HOLD_SECONDS//60} min base\n"
-        f"Extension: {MAX_HOLD_EXTENSION}s x "
-        f"{MAX_EXTENSIONS} times\n"
+        f"Max Hold : {MAX_HOLD_SECONDS//60} min\n"
+        f"Ext      : {MAX_HOLD_EXTENSION}s "
+        f"x {MAX_EXTENSIONS}\n"
         f"Hold Min : {HOLD_SCORE_MINIMUM}/10\n"
         f"TP Zone  : {int(TP_EXIT_MIN_PCT*100)}-"
         f"{int(TP_EXIT_MAX_PCT*100)}%\n"
-        f"Trail SL : {TRAIL_TRIGGER_PCT}% trigger\n"
-        f"Volume   : {VOLUME_MULT}x confirm\n"
-        f"Spread   : {MAX_SPREAD_PCT}% max"
+        f"Dynamic RR: Score Based\n"
+        f"Asian    : 7/8+ only"
     )
 
-    signal   = signal_data.get("signal", "WAIT")
-    score    = signal_data.get("score", 0)
-    atr_5m   = signal_data.get("atr_5m", 0.0)
-    reason   = " | ".join(signal_data.get("reasons", []))
-    session  = signal_data.get("session", "")
-    vol_ok   = signal_data.get("volume_ok", True)
+    signal  = signal_data.get("signal", "WAIT")
+    score   = signal_data.get("score", 0)
+    atr_5m  = signal_data.get("atr_5m", 0.0)
+    reason  = " | ".join(signal_data.get("reasons", []))
+    session = signal_data.get("session", "")
+    vol_ok  = signal_data.get("volume_ok", True)
 
     while True:
         try:
-            # Queue se latest signal lo
             try:
                 new_data = signal_queue.get_nowait()
                 signal   = new_data.get("signal", "WAIT")
@@ -1268,8 +1276,7 @@ def run_execution_engine():
 
             current_price = get_cached_price(ex, SYMBOL)
             if current_price is None:
-                print("[EXECUTE] Price fetch fail "
-                      "— reconnect...")
+                print("[EXECUTE] Price fail — reconnect")
                 ex = get_exchange()
                 time.sleep(EXECUTE_SCAN)
                 continue
@@ -1289,18 +1296,18 @@ def run_execution_engine():
                 extension_count=extension_count,
             )
 
-            # ── Smart Max Hold Check ──────────────
-            if position is not None and entry_time is not None:
+            # ── Smart Max Hold ────────────────────
+            if (position is not None and
+                    entry_time is not None):
                 held_secs = (
                     datetime.now() - entry_time).seconds
 
                 if held_secs >= MAX_HOLD_SECONDS:
                     pnl_now = calc_pnl(
                         position, entry_price,
-                        current_price, pos_size
-                    )
+                        current_price, pos_size)
 
-                    # Profit mai hai — Normal Close
+                    # Profit = Normal Close
                     if pnl_now >= 0:
                         pnl      = pnl_now
                         capital += pnl
@@ -1312,12 +1319,9 @@ def run_execution_engine():
                             position, entry_price,
                             current_price, pnl,
                             capital, duration,
-                            "Max Hold — Profit"
-                        )
-                        print(
-                            f"[MAX HOLD] Profit mai tha"
-                            f" — Normal Close | "
-                            f"PnL={pnl:+.4f}")
+                            "Max Hold — Profit")
+                        print(f"[MAX HOLD] Profit Close "
+                              f"PnL={pnl:+.4f}")
                         send_telegram(
                             f"SCALP CLOSED — Max Hold\n"
                             f"Side    : {position}\n"
@@ -1325,8 +1329,7 @@ def run_execution_engine():
                             f"Exit    : {current_price:.2f}\n"
                             f"PnL     : {pnl:+.4f} USDT\n"
                             f"Capital : {capital:.4f} USDT\n"
-                            f"Reason  : Profit mai tha ✅\n"
-                            f"Time    : {duration}"
+                            f"Reason  : Profit ✅"
                         )
                         position        = None
                         entry_price     = 0.0
@@ -1344,14 +1347,12 @@ def run_execution_engine():
                             capital_used=0.0,
                             capital=capital,
                             last_tp_zone="",
-                            extension_count=0
-                        )
+                            extension_count=0)
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                    # Loss mai hai
+                    # Loss = Scan karo
                     else:
-                        # Max extensions khatam?
                         if extension_count >= MAX_EXTENSIONS:
                             pnl      = pnl_now
                             capital += pnl
@@ -1363,12 +1364,9 @@ def run_execution_engine():
                                 position, entry_price,
                                 current_price, pnl,
                                 capital, duration,
-                                "Max Hold — Extension Over"
-                            )
+                                "Max Hold — Ext Over")
                             print(
-                                f"[MAX HOLD] Max extensions"
-                                f" ({MAX_EXTENSIONS}) khatam"
-                                f" — Force Close | "
+                                f"[MAX HOLD] Force Close "
                                 f"PnL={pnl:+.4f}")
                             send_telegram(
                                 f"SCALP CLOSED — Force\n"
@@ -1383,8 +1381,7 @@ def run_execution_engine():
                                 f"{capital:.4f} USDT\n"
                                 f"Ext     : "
                                 f"{extension_count}/"
-                                f"{MAX_EXTENSIONS} khatam\n"
-                                f"Time    : {duration}"
+                                f"{MAX_EXTENSIONS} done"
                             )
                             position        = None
                             entry_price     = 0.0
@@ -1402,14 +1399,13 @@ def run_execution_engine():
                                 capital_used=0.0,
                                 capital=capital,
                                 last_tp_zone="",
-                                extension_count=0
-                            )
+                                extension_count=0)
                             time.sleep(EXECUTE_SCAN)
                             continue
 
-                        # Market Scan Karo
+                        # Market Scan
                         print(
-                            f"[MAX HOLD] Loss mai hai "
+                            f"[MAX HOLD] Loss "
                             f"PnL={pnl_now:+.4f} "
                             f"— Scanning...")
                         send_telegram(
@@ -1417,47 +1413,41 @@ def run_execution_engine():
                             f"Side   : {position}\n"
                             f"PnL    : "
                             f"{pnl_now:+.4f} USDT\n"
-                            f"Status : Loss mai hain\n"
-                            f"Action : Market scan...\n"
-                            f"Ext    : {extension_count}/"
+                            f"Ext    : "
+                            f"{extension_count}/"
                             f"{MAX_EXTENSIONS}"
                         )
 
                         q_score, q_reasons = (
                             quick_market_scan(
-                                ex, SYMBOL, position
-                            )
-                        )
+                                ex, SYMBOL, position))
 
-                        # Score 7+ = Hold karo
                         if q_score >= HOLD_SCORE_MINIMUM:
                             extension_count += 1
                             update_state(
-                                extension_count=extension_count
-                            )
+                                extension_count=
+                                extension_count)
                             print(
                                 f"[MAX HOLD] "
                                 f"Score={q_score}/10 "
                                 f"STRONG — Hold "
-                                f"({extension_count}/"
-                                f"{MAX_EXTENSIONS})")
+                                f"{extension_count}/"
+                                f"{MAX_EXTENSIONS}")
                             send_telegram(
                                 f"MAX HOLD EXTENDED ⏳\n"
                                 f"Side  : {position}\n"
                                 f"PnL   : "
                                 f"{pnl_now:+.4f} USDT\n"
                                 f"Score : "
-                                f"{q_score}/10 STRONG\n"
-                                f"Hold  : "
+                                f"{q_score}/10\n"
+                                f"Ext   : "
                                 f"{extension_count}/"
                                 f"{MAX_EXTENSIONS}\n"
                                 f"Reason: "
-                                f"{' | '.join(q_reasons[:3])}"
+                                f"{' | '.join(q_reasons[:2])}"
                             )
                             time.sleep(MAX_HOLD_EXTENSION)
                             continue
-
-                        # Score 6- = Close karo
                         else:
                             pnl      = pnl_now
                             capital += pnl
@@ -1469,12 +1459,11 @@ def run_execution_engine():
                                 position, entry_price,
                                 current_price, pnl,
                                 capital, duration,
-                                "Max Hold — Scan Weak"
-                            )
+                                "Max Hold — Weak")
                             print(
                                 f"[MAX HOLD] "
                                 f"Score={q_score}/10 "
-                                f"WEAK — Closing | "
+                                f"WEAK — Close "
                                 f"PnL={pnl:+.4f}")
                             send_telegram(
                                 f"SCALP CLOSED — Weak\n"
@@ -1490,8 +1479,7 @@ def run_execution_engine():
                                 f"Score   : "
                                 f"{q_score}/10 weak\n"
                                 f"Reason  : "
-                                f"{' | '.join(q_reasons[:3])}\n"
-                                f"Time    : {duration}"
+                                f"{' | '.join(q_reasons[:2])}"
                             )
                             position        = None
                             entry_price     = 0.0
@@ -1509,29 +1497,27 @@ def run_execution_engine():
                                 capital_used=0.0,
                                 capital=capital,
                                 last_tp_zone="",
-                                extension_count=0
-                            )
+                                extension_count=0)
                             time.sleep(EXECUTE_SCAN)
                             continue
 
-            # ── TP Zone Check 70-90% ─────────────
+            # ── TP Zone 70-90% ────────────────────
             if position is not None:
                 try:
                     if position == "BUY":
                         tp_range = tp_price - entry_price
                         tp_prog  = (
-                            (current_price - entry_price) /
-                            tp_range
+                            (current_price - entry_price)
+                            / tp_range
                         ) if tp_range != 0 else 0
                     else:
                         tp_range = entry_price - tp_price
                         tp_prog  = (
-                            (entry_price - current_price) /
-                            tp_range
+                            (entry_price - current_price)
+                            / tp_range
                         ) if tp_range != 0 else 0
 
-                    if (TP_EXIT_MIN_PCT
-                            <= tp_prog
+                    if (TP_EXIT_MIN_PCT <= tp_prog
                             <= TP_EXIT_MAX_PCT):
                         pts = get_state("last_points")
                         if pts < TP_HOLD_MIN_SCORE:
@@ -1547,19 +1533,10 @@ def run_execution_engine():
                                 position, entry_price,
                                 current_price, pnl,
                                 capital, duration,
-                                "Early Exit"
-                            )
-                            update_state(
-                                last_tp_zone=(
-                                    f"TP {tp_prog*100:.0f}%"
-                                    f" exit | Score={pts}/8"
-                                    f" | PnL={pnl:+.4f}"
-                                )
-                            )
+                                "Early Exit")
                             print(
                                 f"[EARLY EXIT] "
-                                f"TP {tp_prog*100:.0f}% | "
-                                f"Score={pts}/8 | "
+                                f"{tp_prog*100:.0f}% | "
                                 f"PnL={pnl:+.4f}")
                             send_telegram(
                                 f"SCALP EARLY EXIT\n"
@@ -1588,18 +1565,15 @@ def run_execution_engine():
                                 capital_used=0.0,
                                 capital=capital,
                                 last_tp_zone="",
-                                extension_count=0
-                            )
+                                extension_count=0)
                             time.sleep(EXECUTE_SCAN)
                             continue
                         else:
                             update_state(
                                 last_tp_zone=(
                                     f"TP {tp_prog*100:.0f}%"
-                                    f" zone | Score={pts}/8"
-                                    f" strong — wait"
-                                )
-                            )
+                                    f" | Score={pts}/8"
+                                    f" strong"))
                     else:
                         update_state(last_tp_zone="")
                 except Exception as e:
@@ -1610,34 +1584,30 @@ def run_execution_engine():
                 try:
                     if position == "BUY":
                         p_pct = (
-                            (current_price - entry_price) /
-                            entry_price
-                        ) * 100
+                            (current_price - entry_price)
+                            / entry_price) * 100
                         if p_pct >= TRAIL_TRIGGER_PCT:
                             new_sl = current_price * (
-                                1 - TRAIL_DISTANCE_PCT / 100)
+                                1 - TRAIL_DISTANCE_PCT/100)
                             if new_sl > sl_price:
                                 sl_price = new_sl
                                 update_state(
                                     sl_price=sl_price)
-                                print(
-                                    f"[TRAIL] BUY SL "
-                                    f"-> {sl_price:.2f}")
+                                print(f"[TRAIL] BUY "
+                                      f"{sl_price:.2f}")
                     elif position == "SELL":
                         p_pct = (
-                            (entry_price - current_price) /
-                            entry_price
-                        ) * 100
+                            (entry_price - current_price)
+                            / entry_price) * 100
                         if p_pct >= TRAIL_TRIGGER_PCT:
                             new_sl = current_price * (
-                                1 + TRAIL_DISTANCE_PCT / 100)
+                                1 + TRAIL_DISTANCE_PCT/100)
                             if new_sl < sl_price:
                                 sl_price = new_sl
                                 update_state(
                                     sl_price=sl_price)
-                                print(
-                                    f"[TRAIL] SELL SL "
-                                    f"-> {sl_price:.2f}")
+                                print(f"[TRAIL] SELL "
+                                      f"{sl_price:.2f}")
                 except Exception as e:
                     print(f"[TRAIL ERROR] {e}")
 
@@ -1647,14 +1617,12 @@ def run_execution_engine():
                     (position == "BUY" and
                      current_price <= sl_price) or
                     (position == "SELL" and
-                     current_price >= sl_price)
-                )
+                     current_price >= sl_price))
                 hit_tp = (
                     (position == "BUY" and
                      current_price >= tp_price) or
                     (position == "SELL" and
-                     current_price <= tp_price)
-                )
+                     current_price <= tp_price))
 
                 if hit_sl or hit_tp:
                     label    = ("STOP LOSS" if hit_sl
@@ -1670,12 +1638,9 @@ def run_execution_engine():
                     save_trade_history(
                         position, entry_price,
                         current_price, pnl,
-                        capital, duration, label
-                    )
-                    print(
-                        f"[SCALP] {label} | {position} | "
-                        f"PnL={pnl:+.4f} | "
-                        f"Capital={capital:.4f}")
+                        capital, duration, label)
+                    print(f"[SCALP] {label} | "
+                          f"PnL={pnl:+.4f}")
                     send_telegram(
                         f"SCALP CLOSED — {label}\n"
                         f"Side    : {position}\n"
@@ -1683,6 +1648,7 @@ def run_execution_engine():
                         f"Exit    : {current_price:.2f}\n"
                         f"PnL     : {pnl:+.4f} USDT\n"
                         f"Capital : {capital:.4f} USDT\n"
+                        f"RR Type : {rr_type}\n"
                         f"Time    : {duration}"
                     )
                     position        = None
@@ -1693,24 +1659,24 @@ def run_execution_engine():
                     tp_price        = 0.0
                     capital_used    = 0.0
                     extension_count = 0
-                    cooldown_end    = time.time() + COOLDOWN
+                    cooldown_end    = (time.time() +
+                                      COOLDOWN)
                     save_cooldown(cooldown_end)
                     update_state(
                         position=None,
                         capital_used=0.0,
                         capital=capital,
                         last_tp_zone="",
-                        extension_count=0
-                    )
+                        extension_count=0)
                     time.sleep(EXECUTE_SCAN)
                     continue
 
-            # ── Cooldown Check ───────────────────
+            # ── Cooldown ─────────────────────────
             if (cooldown_end is not None and
                     time.time() < cooldown_end):
-                remaining = int(cooldown_end - time.time())
-                print(f"[{now}] Cooldown {remaining}s | "
-                      f"Price={current_price:.2f}")
+                remaining = int(
+                    cooldown_end - time.time())
+                print(f"[{now}] Cooldown {remaining}s")
                 time.sleep(EXECUTE_SCAN)
                 continue
 
@@ -1719,32 +1685,32 @@ def run_execution_engine():
                 if (signal in ["BUY", "SELL"] and
                         int(score) >= MIN_SCORE):
 
+                    # Spread check
                     spread_ok = check_spread(ex, SYMBOL)
                     if not spread_ok:
-                        print(f"[{now}] SKIP — spread high")
+                        print(f"[{now}] SKIP — spread")
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                                       if not vol_ok and int(score) < 7:
-                        print(
-                            f"[{now}] SKIP — volume weak "
-                            f"+ score={score}")
+                    # Volume check
+                    if not vol_ok and int(score) < 7:
+                        print(f"[{now}] SKIP — volume weak")
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                    # Asian session extra check
-                    good_sess, sess_name = is_good_session()
+                    # Asian session check
+                    good_sess, sess_name = (
+                        is_good_session())
                     if not good_sess and int(score) < 7:
                         print(
-                            f"[{now}] SKIP — Asian session "
-                            f"+ score={score} < 7")
+                            f"[{now}] SKIP — Asian "
+                            f"score={score} < 7")
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                                       # Dynamic RR — Score based
+                    # Dynamic RR
                     sl_mult, tp_mult, rr_type = (
-                        get_dynamic_rr(score)
-                    )
+                        get_dynamic_rr(score))
 
                     if atr_5m > 0:
                         sl_pct = (atr_5m * sl_mult /
@@ -1756,7 +1722,7 @@ def run_execution_engine():
                         tp_pct = 0.3 * tp_mult
 
                     capital_used    = (capital *
-                                      (CAPITAL_USE_PCT / 100))
+                                      (CAPITAL_USE_PCT/100))
                     pos_size        = ((capital_used *
                                        LEVERAGE) /
                                       current_price)
@@ -1768,22 +1734,22 @@ def run_execution_engine():
 
                     if signal == "BUY":
                         sl_price = entry_price * (
-                            1 - sl_pct / 100)
+                            1 - sl_pct/100)
                         tp_price = entry_price * (
-                            1 + tp_pct / 100)
+                            1 + tp_pct/100)
                     else:
                         sl_price = entry_price * (
-                            1 + sl_pct / 100)
+                            1 + sl_pct/100)
                         tp_price = entry_price * (
-                            1 - tp_pct / 100)
+                            1 - tp_pct/100)
 
                     print(
-                        f"[SCALP] OPENED | {position} | "
+                        f"[SCALP] OPENED {position} | "
                         f"Entry={entry_price:.2f} | "
                         f"SL={sl_price:.2f} | "
                         f"TP={tp_price:.2f} | "
-                        f"Score={int(score)}/8")
-                                      
+                        f"Score={int(score)}/8 | "
+                        f"{rr_type}")
                     send_telegram(
                         f"SCALP OPENED\n"
                         f"Side    : {position}\n"
@@ -1791,7 +1757,7 @@ def run_execution_engine():
                         f"SL      : {sl_price:.2f}\n"
                         f"TP      : {tp_price:.2f}\n"
                         f"ATR 5m  : {atr_5m:.2f}\n"
-                        f"Capital : {capital_used:.2f} USDT\n"
+                        f"Capital : {capital_used:.2f}\n"
                         f"Score   : {int(score)}/8\n"
                         f"RR Type : {rr_type}\n"
                         f"SL Mult : {sl_mult}x ATR\n"
@@ -1799,14 +1765,13 @@ def run_execution_engine():
                         f"Volume  : "
                         f"{'OK' if vol_ok else 'WEAK'}\n"
                         f"Session : {session}\n"
-                        f"Reason  : {reason[:250]}"
+                        f"Reason  : {reason[:200]}"
                     )
                 else:
                     print(
                         f"[{now}] WAIT | "
                         f"Score={int(score)}/8 | "
-                        f"Price={current_price:.2f} | "
-                        f"Session={session}")
+                        f"Price={current_price:.2f}")
 
             # ── Holding ──────────────────────────
             else:
@@ -1816,22 +1781,23 @@ def run_execution_engine():
                 held = (datetime.now() -
                         entry_time).seconds
                 print(
-                    f"[{now}] Holding {position} | "
+                    f"[{now}] {position} | "
                     f"PnL={pnl_now:+.4f} | "
                     f"Price={current_price:.2f} | "
                     f"Held={held}s | "
                     f"Ext={extension_count}/"
-                    f"{MAX_EXTENSIONS}")
+                    f"{MAX_EXTENSIONS} | "
+                    f"{rr_type}")
 
         except Exception as e:
             err_msg = str(e)
             print(f"[EXECUTE ERROR] {err_msg}")
             if "429" in err_msg or "Too Many" in err_msg:
-                print("[RATE LIMIT] 60s wait...")
+                print("[RATE LIMIT] 60s...")
                 time.sleep(60)
             elif ("connection" in err_msg.lower() or
                   "timeout" in err_msg.lower()):
-                print("[CONNECTION] Reconnecting...")
+                print("[CONNECTION] Reconnect...")
                 ex = get_exchange()
                 time.sleep(10)
             else:
@@ -1844,16 +1810,18 @@ def run_execution_engine():
 #  START
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
+    total_max = (MAX_HOLD_SECONDS +
+                 MAX_HOLD_EXTENSION * MAX_EXTENSIONS)
     print("=" * 55)
-    print("  SCALPING BOT v3.0 — Smart Max Hold")
+    print("  SCALPING BOT v3.0 — Final Edition")
     print("  Strategy  : Smart Money 24/7")
     print("  Min Score : 6/8")
     print("  Capital   : 90%")
-   print("  Max Hold  : 3 min + Smart Extension")
-print(f"  Extension : {MAX_HOLD_EXTENSION}s "
-      f"x {MAX_EXTENSIONS} = "
-      f"{(MAX_HOLD_SECONDS + MAX_HOLD_EXTENSION * MAX_EXTENSIONS)//60} min max")
-    print("  Hold Score: 7/10")
+    print("  Dynamic RR: 6=1:1.5 | 7=1:2 | 8=1:3")
+    print(f"  Max Hold  : {MAX_HOLD_SECONDS}s + "
+          f"{MAX_HOLD_EXTENSION}s x {MAX_EXTENSIONS} "
+          f"= {total_max//60} min max")
+    print("  Asian     : 7/8+ only")
     print("=" * 55)
 
     t1 = threading.Thread(
@@ -1875,11 +1843,9 @@ print(f"  Extension : {MAX_HOLD_EXTENSION}s "
     print(f"[INFO] Flask    : port 8081")
     print(f"[INFO] Decision : har {DECISION_SCAN}s")
     print(f"[INFO] Execute  : har {EXECUTE_SCAN}s")
-    print(f"[INFO] Max Hold : "
-          f"{MAX_HOLD_SECONDS}s base + "
-          f"{MAX_HOLD_EXTENSION}s x {MAX_EXTENSIONS}")
-    print(f"[INFO] Hold Min : {HOLD_SCORE_MINIMUM}/10")
-    print(f"[INFO] 24/7     : ON")
+    print(f"[INFO] Dynamic RR ON")
+    print(f"[INFO] Asian 7/8+ ON")
+    print(f"[INFO] 24/7 ON")
 
     while True:
         time.sleep(60)
