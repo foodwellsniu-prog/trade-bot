@@ -60,8 +60,17 @@ MAX_EXTENSIONS     = 3      # Max 3 baar extend
                              # Total = 3+2.3+2.3+2.3 = 10 min
 
 ATR_PERIOD       = 7
-ATR_SL_MULT      = 1.5
-ATR_TP_MULT      = 1.5
+# Dynamic RR — Score Based
+# Score 6/8 = Conservative 1:1.5
+# Score 7/8 = Moderate     1:2
+# Score 8/8 = Aggressive   1:3
+RR_CONFIG = {
+    6: {"sl_mult": 1.0, "tp_mult": 1.5},
+    7: {"sl_mult": 1.0, "tp_mult": 2.0},
+    8: {"sl_mult": 0.8, "tp_mult": 2.5},
+}
+RR_DEFAULT_SL = 1.0   # Fallback
+RR_DEFAULT_TP = 1.5   # Fallback
 
 # TP Early Exit
 TP_EXIT_MIN_PCT   = 0.70
@@ -844,6 +853,42 @@ def calc_pnl(side, entry, exit_price, pos_size):
         return (exit_price - entry) * pos_size
     else:
         return (entry - exit_price) * pos_size
+        
+# ─────────────────────────────────────────────
+#  DYNAMIC RR — Score Based
+# ─────────────────────────────────────────────
+def get_dynamic_rr(score):
+    """
+    Score ke hisaab se SL aur TP multiplier lo
+
+    Score 6/8 = Conservative = 1:1.5
+    Score 7/8 = Moderate     = 1:2
+    Score 8/8 = Aggressive   = 1:3
+    """
+    score = int(score)
+
+    if score >= 8:
+        sl_mult = RR_CONFIG[8]["sl_mult"]
+        tp_mult = RR_CONFIG[8]["tp_mult"]
+        rr_type = "Aggressive 1:3.1"
+    elif score == 7:
+        sl_mult = RR_CONFIG[7]["sl_mult"]
+        tp_mult = RR_CONFIG[7]["tp_mult"]
+        rr_type = "Moderate 1:2"
+    elif score == 6:
+        sl_mult = RR_CONFIG[6]["sl_mult"]
+        tp_mult = RR_CONFIG[6]["tp_mult"]
+        rr_type = "Conservative 1:1.5"
+    else:
+        sl_mult = RR_DEFAULT_SL
+        tp_mult = RR_DEFAULT_TP
+        rr_type = "Default 1:1.5"
+
+    print(f"[DYNAMIC RR] Score={score}/8 | "
+          f"SL={sl_mult}x | TP={tp_mult}x | "
+          f"Type={rr_type}")
+
+    return sl_mult, tp_mult, rr_type
 
 
 # ─────────────────────────────────────────────
@@ -1696,14 +1741,19 @@ def run_execution_engine():
                         time.sleep(EXECUTE_SCAN)
                         continue
 
+                                       # Dynamic RR — Score based
+                    sl_mult, tp_mult, rr_type = (
+                        get_dynamic_rr(score)
+                    )
+
                     if atr_5m > 0:
-                        sl_pct = (atr_5m * ATR_SL_MULT /
+                        sl_pct = (atr_5m * sl_mult /
                                   current_price) * 100
-                        tp_pct = (atr_5m * ATR_TP_MULT /
+                        tp_pct = (atr_5m * tp_mult /
                                   current_price) * 100
                     else:
-                        sl_pct = 0.3
-                        tp_pct = 0.3
+                        sl_pct = 0.3 * sl_mult
+                        tp_pct = 0.3 * tp_mult
 
                     capital_used    = (capital *
                                       (CAPITAL_USE_PCT / 100))
@@ -1733,6 +1783,7 @@ def run_execution_engine():
                         f"SL={sl_price:.2f} | "
                         f"TP={tp_price:.2f} | "
                         f"Score={int(score)}/8")
+                                      
                     send_telegram(
                         f"SCALP OPENED\n"
                         f"Side    : {position}\n"
@@ -1742,6 +1793,9 @@ def run_execution_engine():
                         f"ATR 5m  : {atr_5m:.2f}\n"
                         f"Capital : {capital_used:.2f} USDT\n"
                         f"Score   : {int(score)}/8\n"
+                        f"RR Type : {rr_type}\n"
+                        f"SL Mult : {sl_mult}x ATR\n"
+                        f"TP Mult : {tp_mult}x ATR\n"
                         f"Volume  : "
                         f"{'OK' if vol_ok else 'WEAK'}\n"
                         f"Session : {session}\n"
