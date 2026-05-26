@@ -1082,10 +1082,17 @@ def run_decision_engine():
             else:
                 signal = "WAIT"
 
-            if not good_session and signal != "WAIT":
-                print(f"[SESSION] {session_name} "
-                      f"— signal weak, skip")
-                signal = "WAIT"
+                       if not good_session and signal != "WAIT":
+                # Asian session mai sirf 7/8+ score pe trade
+                if points >= 7:
+                    print(f"[SESSION] {session_name} "
+                          f"— Score {points}/8 HIGH "
+                          f"— Asian session trade allowed")
+                else:
+                    print(f"[SESSION] {session_name} "
+                          f"— Score {points}/8 LOW "
+                          f"— Skip")
+                    signal = "WAIT"
 
             print(f"[SCALP] {scan_time} | {points}/8 | "
                   f"{signal} | ATR_1m={atr_1m:.2f} | "
@@ -1673,10 +1680,19 @@ def run_execution_engine():
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                    if not vol_ok and int(score) < 7:
+                                       if not vol_ok and int(score) < 7:
                         print(
                             f"[{now}] SKIP — volume weak "
                             f"+ score={score}")
+                        time.sleep(EXECUTE_SCAN)
+                        continue
+
+                    # Asian session extra check
+                    good_sess, sess_name = is_good_session()
+                    if not good_sess and int(score) < 7:
+                        print(
+                            f"[{now}] SKIP — Asian session "
+                            f"+ score={score} < 7")
                         time.sleep(EXECUTE_SCAN)
                         continue
 
