@@ -52,7 +52,10 @@ MIN_CONFIDENCE   = int((MIN_SCORE / 8) * 100)
 
 EXECUTE_SCAN     = 8
 DECISION_SCAN    = 60
-COOLDOWN         = 60
+COOLDOWN         = 60   # Default
+COOLDOWN_WIN     = 30   # Win ke baad
+COOLDOWN_LOSS    = 90   # Loss ke baad
+COOLDOWN_2LOSS   = 180  # 2 loss ke baad
 
 # Max Hold — Smart Logic
 MAX_HOLD_SECONDS   = 180
@@ -79,12 +82,17 @@ TP_HOLD_MIN_SCORE = 7
 # Trailing SL
 TRAIL_TRIGGER_PCT  = 1.0
 TRAIL_DISTANCE_PCT = 0.5
+# Break Even SL
+BREAK_EVEN_TRIGGER = 0.5  # 0.5% profit pe SL = Entry
 
 # Volume
 VOLUME_MULT = 1.5
 
 # Spread
 MAX_SPREAD_PCT = 0.05
+# Volatility Filter
+MIN_ATR_VALUE  = 5.0    # Minimum ATR
+MAX_ATR_VALUE  = 50.0   # Maximum ATR
 
 UPDATE_INTERVAL  = 1800
 
@@ -1138,6 +1146,24 @@ def run_decision_engine():
                 signal = "SELL"
             else:
                 signal = "WAIT"
+         # Volatility Filter
+            if signal != "WAIT":
+                if atr_5m < MIN_ATR_VALUE:
+                    print(
+                        f"[VOL FILTER] ATR too low: "
+                        f"{atr_5m:.2f} < "
+                        f"{MIN_ATR_VALUE} — Skip")
+                    signal = "WAIT"
+                elif atr_5m > MAX_ATR_VALUE:
+                    print(
+                        f"[VOL FILTER] ATR too high: "
+                        f"{atr_5m:.2f} > "
+                        f"{MAX_ATR_VALUE} — Skip")
+                    signal = "WAIT"
+                else:
+                    print(
+                        f"[VOL FILTER] ATR OK: "
+                        f"{atr_5m:.2f} ✅")
 
             # ── Session Filter — Fixed ────────────
             if not good_session and signal != "WAIT":
@@ -1226,6 +1252,7 @@ def run_execution_engine():
     tp_price        = 0.0
     capital_used    = 0.0
     cooldown_end    = load_cooldown()
+    consecutive_losses = 0   # Smart Cooldown counter
     extension_count = 0
     sl_mult         = RR_DEFAULT_SL
     tp_mult         = RR_DEFAULT_TP
@@ -1578,6 +1605,50 @@ def run_execution_engine():
                         update_state(last_tp_zone="")
                 except Exception as e:
                     print(f"[TP ZONE ERROR] {e}")
+                    
+                # ── Break Even SL ────────────────────
+            if position is not None:
+                try:
+                    if position == "BUY":
+                        be_pct = (
+                            (current_price - entry_price)
+                            / entry_price) * 100
+                        if (be_pct >= BREAK_EVEN_TRIGGER
+                                and sl_price < entry_price):
+                            sl_price = entry_price
+                            update_state(sl_price=sl_price)
+                            print(
+                                f"[BE] BUY SL = Entry "
+                                f"{sl_price:.2f} ✅")
+                            send_telegram(
+                                f"BREAK EVEN SET ✅\n"
+                                f"Side  : {position}\n"
+                                f"Entry : {entry_price:.2f}\n"
+                                f"SL    : {sl_price:.2f}\n"
+                                f"Profit: {be_pct:.2f}%\n"
+                                f"= Loss impossible!"
+                            )
+                    elif position == "SELL":
+                        be_pct = (
+                            (entry_price - current_price)
+                            / entry_price) * 100
+                        if (be_pct >= BREAK_EVEN_TRIGGER
+                                and sl_price > entry_price):
+                            sl_price = entry_price
+                            update_state(sl_price=sl_price)
+                            print(
+                                f"[BE] SELL SL = Entry "
+                                f"{sl_price:.2f} ✅")
+                            send_telegram(
+                                f"BREAK EVEN SET ✅\n"
+                                f"Side  : {position}\n"
+                                f"Entry : {entry_price:.2f}\n"
+                                f"SL    : {sl_price:.2f}\n"
+                                f"Profit: {be_pct:.2f}%\n"
+                                f"= Loss impossible!"
+                            )
+                except Exception as e:
+                    print(f"[BE ERROR] {e}")
 
             # ── Trailing SL ──────────────────────
             if position is not None:
@@ -1625,7 +1696,7 @@ def run_execution_engine():
                      current_price <= tp_price))
 
                 if hit_sl or hit_tp:
-                    label    = ("STOP LOSS" if hit_sl
+                                        label    = ("STOP LOSS" if hit_sl
                                 else "TAKE PROFIT")
                     pnl      = calc_pnl(
                         position, entry_price,
@@ -1639,8 +1710,26 @@ def run_execution_engine():
                         position, entry_price,
                         current_price, pnl,
                         capital, duration, label)
+
+                    # Smart Cooldown Logic
+                    if pnl > 0:
+                        consecutive_losses = 0
+                        smart_cd = COOLDOWN_WIN
+                        cd_reason = "Win"
+                    else:
+                        consecutive_losses += 1
+                        if consecutive_losses >= 2:
+                            smart_cd = COOLDOWN_2LOSS
+                            cd_reason = (
+                                f"{consecutive_losses}"
+                                f" Loss streak!")
+                        else:
+                            smart_cd = COOLDOWN_LOSS
+                            cd_reason = "Loss"
+
                     print(f"[SCALP] {label} | "
-                          f"PnL={pnl:+.4f}")
+                          f"PnL={pnl:+.4f} | "
+                          f"Cooldown={smart_cd}s")
                     send_telegram(
                         f"SCALP CLOSED — {label}\n"
                         f"Side    : {position}\n"
@@ -1649,7 +1738,9 @@ def run_execution_engine():
                         f"PnL     : {pnl:+.4f} USDT\n"
                         f"Capital : {capital:.4f} USDT\n"
                         f"RR Type : {rr_type}\n"
-                        f"Time    : {duration}"
+                        f"Time    : {duration}\n"
+                        f"Cooldown: {smart_cd}s "
+                        f"({cd_reason})"
                     )
                     position        = None
                     entry_price     = 0.0
@@ -1660,7 +1751,7 @@ def run_execution_engine():
                     capital_used    = 0.0
                     extension_count = 0
                     cooldown_end    = (time.time() +
-                                      COOLDOWN)
+                                      smart_cd)
                     save_cooldown(cooldown_end)
                     update_state(
                         position=None,
