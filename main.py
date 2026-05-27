@@ -1696,7 +1696,7 @@ def run_execution_engine():
                      current_price <= tp_price))
 
                 if hit_sl or hit_tp:
-                                        label    = ("STOP LOSS" if hit_sl
+                    label    = ("STOP LOSS" if hit_sl
                                 else "TAKE PROFIT")
                     pnl      = calc_pnl(
                         position, entry_price,
