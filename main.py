@@ -60,11 +60,11 @@ BOT_TOKEN        = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
 CHAT_ID          = "7102976298"
 
 # ── Capital Config ────────────────────────────────────
-TOTAL_CAPITAL    = 112.4622
+TOTAL_CAPITAL    = 420
 NUM_SYMBOLS      = len(SYMBOLS)
-CAPITAL_PER_SYM  = TOTAL_CAPITAL / NUM_SYMBOLS   # 28.11 per symbol
+CAPITAL_PER_SYM  = TOTAL_CAPITAL / NUM_SYMBOLS   # 105 per symbol
 CAPITAL_USE_PCT  = 90                             # 90% per trade
-LEVERAGE         = 5                              # 5x all symbols
+LEVERAGE         = 10                            # 10x all symbols
 
 # ── Score Config ──────────────────────────────────────
 MIN_SCORE        = 8
