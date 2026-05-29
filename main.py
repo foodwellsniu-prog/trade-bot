@@ -4,12 +4,12 @@ SCALPING BOT v4.0 — Multi-Symbol Ultimate SMC Edition
 Strategy  : Smart Money Concepts (SMC)
             BOS + CHOCH + OB + LIQ + FVG + RSI + MA
 Symbols   : BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT
-Timeframes: 15m (Trend) + 5m (Confirm) + 1m (Entry)
+Timeframes: 5m (Trend) + 1m (Entry)
 Sessions  : 24/7 with Session Filter
 Min Score : 8/12
 Capital   : Total / 4 Symbols = Per Symbol
 Trade Use : 90% of Per Symbol Capital
-Leverage  : 5x (All Symbols)
+Leverage  : 10x (All Symbols)
 TP Zone   : 70-90% Early Exit
 Max Hold  : 3 min base + Smart Extension
 Dynamic RR: Score Based (1:2 to 1:4)
@@ -26,7 +26,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Scalping Bot v4.0 Multi-Symbol Ultimate SMC Running!"
+    return "Scalping Bot v4.0 Multi-Symbol SMC Running!"
 
 def run_server():
     import os
@@ -43,7 +43,7 @@ from datetime import datetime, timezone, timedelta
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CONFIG — MULTI SYMBOL
+#  CONFIG
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 SYMBOLS = [
@@ -53,30 +53,30 @@ SYMBOLS = [
     "BNB/USDT:USDT",
 ]
 
-API_KEY          = ""
-API_SECRET       = ""
+API_KEY    = ""
+API_SECRET = ""
 
-BOT_TOKEN        = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
-CHAT_ID          = "7102976298"
+BOT_TOKEN  = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
+CHAT_ID    = "7102976298"
 
 # ── Capital Config ────────────────────────────────────
-TOTAL_CAPITAL    = 420
-NUM_SYMBOLS      = len(SYMBOLS)
-CAPITAL_PER_SYM  = TOTAL_CAPITAL / NUM_SYMBOLS   # 105 per symbol
-CAPITAL_USE_PCT  = 90                             # 90% per trade
-LEVERAGE         = 10                            # 10x all symbols
+TOTAL_CAPITAL   = 420
+NUM_SYMBOLS     = len(SYMBOLS)
+CAPITAL_PER_SYM = TOTAL_CAPITAL / NUM_SYMBOLS   # 105 per symbol
+CAPITAL_USE_PCT = 90                             # 90% per trade
+LEVERAGE        = 10                             # 10x all symbols
 
 # ── Score Config ──────────────────────────────────────
-MIN_SCORE        = 8
-MIN_CONFIDENCE   = int((MIN_SCORE / 12) * 100)
+MIN_SCORE      = 8
+MIN_CONFIDENCE = int((MIN_SCORE / 12) * 100)
 
 # ── Timing Config ─────────────────────────────────────
-EXECUTE_SCAN     = 8
-DECISION_SCAN    = 60
-COOLDOWN         = 60
-COOLDOWN_WIN     = 30
-COOLDOWN_LOSS    = 90
-COOLDOWN_2LOSS   = 180
+EXECUTE_SCAN   = 8
+DECISION_SCAN  = 60
+COOLDOWN       = 60
+COOLDOWN_WIN   = 30
+COOLDOWN_LOSS  = 90
+COOLDOWN_2LOSS = 180
 
 # ── Max Hold Config ───────────────────────────────────
 MAX_HOLD_SECONDS   = 180
@@ -85,7 +85,7 @@ HOLD_SCORE_MINIMUM = 7
 MAX_EXTENSIONS     = 3
 
 # ── ATR Config ────────────────────────────────────────
-ATR_PERIOD       = 7
+ATR_PERIOD = 7
 
 # ── ATR Range Per Symbol ──────────────────────────────
 ATR_RANGES = {
@@ -103,13 +103,13 @@ RR_CONFIG = {
     11: {"sl_mult": 0.7, "tp_mult": 3.5},
     12: {"sl_mult": 0.6, "tp_mult": 4.0},
 }
-RR_DEFAULT_SL    = 1.0
-RR_DEFAULT_TP    = 2.0
-MIN_RR           = 2.0
+RR_DEFAULT_SL = 1.0
+RR_DEFAULT_TP = 2.0
+MIN_RR        = 2.0
 
 # ── TP Early Exit ─────────────────────────────────────
-TP_EXIT_MIN_PCT  = 0.70
-TP_EXIT_MAX_PCT  = 0.90
+TP_EXIT_MIN_PCT   = 0.70
+TP_EXIT_MAX_PCT   = 0.90
 TP_HOLD_MIN_SCORE = 9
 
 # ── Trailing SL ───────────────────────────────────────
@@ -120,13 +120,13 @@ TRAIL_DISTANCE_PCT = 0.5
 BREAK_EVEN_TRIGGER = 0.5
 
 # ── Volume Config ─────────────────────────────────────
-VOLUME_MULT      = 1.5
+VOLUME_MULT = 1.5
 
 # ── Spread Config ─────────────────────────────────────
-MAX_SPREAD_PCT   = 0.05
+MAX_SPREAD_PCT = 0.05
 
 # ── Update Config ─────────────────────────────────────
-UPDATE_INTERVAL  = 1800
+UPDATE_INTERVAL = 1800
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -135,8 +135,7 @@ UPDATE_INTERVAL  = 1800
 
 def get_files(symbol):
     """
-    Har symbol ke liye alag file names generate karta hai
-    Example: ETH/USDT:USDT → ETH_USDT_USDT
+    Har symbol ke liye alag file names
     """
     name = symbol.replace(
         "/", "_").replace(":", "_")
@@ -182,7 +181,6 @@ price_caches = {
 def get_cached_price(ex, symbol, max_age=5):
     """
     Cache se price return karta hai
-    max_age seconds ke baad fresh fetch karta hai
     """
     cache = price_caches[symbol]
     with cache["lock"]:
@@ -202,7 +200,7 @@ def get_cached_price(ex, symbol, max_age=5):
 
 def make_trade_state(capital):
     """
-    Har symbol ke liye fresh trade state banata hai
+    Har symbol ke liye fresh trade state
     """
     return {
         "position":        None,
@@ -220,10 +218,9 @@ def make_trade_state(capital):
         "last_tp_zone":    "",
         "last_session":    "",
         "extension_count": 0,
-        "struct_15m":      "RANGE",
         "struct_5m":       "RANGE",
         "struct_1m":       "RANGE",
-        "atr_15m":         0.0,
+        "atr_5m":          0.0,
         "rr_type":         "Default",
     }
 
@@ -236,7 +233,7 @@ trade_states = {
 
 def update_state(symbol, **kwargs):
     """
-    Thread-safe state update karta hai
+    Thread safe state update
     """
     with state_lock:
         for key, val in kwargs.items():
@@ -246,7 +243,7 @@ def update_state(symbol, **kwargs):
 
 def get_state(symbol, key):
     """
-    Thread-safe state read karta hai
+    Thread safe state read
     """
     with state_lock:
         return trade_states[symbol].get(key)
@@ -258,8 +255,7 @@ def get_state(symbol, key):
 
 def load_capital(symbol):
     """
-    Symbol ka capital file se load karta hai
-    File nahi mili toh CAPITAL_PER_SYM use karta hai
+    Capital file se load karta hai
     """
     files = get_files(symbol)
     try:
@@ -291,7 +287,7 @@ def load_capital(symbol):
 
 def save_capital(symbol, capital):
     """
-    Symbol ka capital file mein save karta hai
+    Capital file mein save karta hai
     """
     files = get_files(symbol)
     try:
@@ -308,7 +304,7 @@ def save_capital(symbol, capital):
 
 def save_cooldown(symbol, end_time):
     """
-    Cooldown end time file mein save karta hai
+    Cooldown end time save karta hai
     """
     files = get_files(symbol)
     try:
@@ -316,20 +312,20 @@ def save_cooldown(symbol, end_time):
             f.write(str(end_time))
     except Exception as e:
         print(
-            f"[{symbol}][COOLDOWN SAVE ERROR] {e}")
+            f"[{symbol}][COOLDOWN ERROR] {e}")
 
 
 def load_cooldown(symbol):
     """
     Cooldown file se load karta hai
-    Agar abhi bhi active hai toh return karta hai
     """
     files = get_files(symbol)
     try:
         with open(files["cooldown"], "r") as f:
             val = float(f.read().strip())
             if val > time.time():
-                remaining = int(val - time.time())
+                remaining = int(
+                    val - time.time())
                 print(
                     f"[{symbol}][COOLDOWN] "
                     f"Remaining: {remaining}s")
@@ -347,7 +343,7 @@ def save_trade_history(symbol, side, entry,
                        exit_price, pnl,
                        capital, duration, label):
     """
-    Trade ko history file mein save karta hai
+    Trade history file mein save karta hai
     """
     files = get_files(symbol)
     try:
@@ -387,7 +383,7 @@ def save_trade_history(symbol, side, entry,
 
 def get_daily_stats(symbol):
     """
-    Aaj ke trades ki stats return karta hai
+    Aaj ke trades ki stats
     """
     files = get_files(symbol)
     try:
@@ -411,29 +407,28 @@ def get_daily_stats(symbol):
         t for t in trades
         if t["result"] == "WIN"])
     losses    = total - wins
-    win_rate  = round((wins / total) * 100, 1)
+    win_rate  = round(
+        (wins / total) * 100, 1)
     daily_pnl = round(
         sum(t["pnl"] for t in trades), 4)
-    best      = round(
-        max(t["pnl"] for t in trades), 4)
-    worst     = round(
-        min(t["pnl"] for t in trades), 4)
 
     return {
-        "total":   total,
-        "wins":    wins,
-        "losses":  losses,
+        "total":    total,
+        "wins":     wins,
+        "losses":   losses,
         "win_rate": win_rate,
-        "pnl":     daily_pnl,
-        "best":    best,
-        "worst":   worst,
-        "capital": trades[-1]["capital"],
+        "pnl":      daily_pnl,
+        "best":     round(
+            max(t["pnl"] for t in trades), 4),
+        "worst":    round(
+            min(t["pnl"] for t in trades), 4),
+        "capital":  trades[-1]["capital"],
     }
 
 
 def get_overall_stats(symbol):
     """
-    Sab trades ki overall stats return karta hai
+    Sab trades ki overall stats
     """
     files = get_files(symbol)
     try:
@@ -452,7 +447,8 @@ def get_overall_stats(symbol):
         t for t in history
         if t["result"] == "WIN"])
     losses    = total - wins
-    win_rate  = round((wins / total) * 100, 1)
+    win_rate  = round(
+        (wins / total) * 100, 1)
     total_pnl = round(
         sum(t["pnl"] for t in history), 4)
 
@@ -477,7 +473,6 @@ def get_overall_stats(symbol):
 def get_exchange():
     """
     Binance futures exchange connect karta hai
-    Fail hone par 30s baad retry karta hai
     """
     while True:
         try:
@@ -492,15 +487,13 @@ def get_exchange():
             return ex
         except Exception as e:
             print(
-                f"[RECONNECT] Fail: {e}\n"
-                f"[RECONNECT] 30s retry...")
+                f"[RECONNECT] {e} — 30s retry...")
             time.sleep(30)
 
 
 def safe_fetch_ticker(ex, symbol, retries=3):
     """
     Symbol ka last price fetch karta hai
-    Rate limit aane par wait karta hai
     """
     for i in range(retries):
         try:
@@ -512,7 +505,7 @@ def safe_fetch_ticker(ex, symbol, retries=3):
                 wait = (i + 1) * 30
                 print(
                     f"[RATE LIMIT] "
-                    f"Ticker {wait}s wait...")
+                    f"Ticker {wait}s...")
                 time.sleep(wait)
             else:
                 print(
@@ -526,7 +519,6 @@ def safe_fetch_ohlcv(ex, symbol, tf,
                      limit, retries=3):
     """
     OHLCV candles fetch karta hai
-    Rate limit aane par wait karta hai
     """
     for i in range(retries):
         try:
@@ -553,7 +545,7 @@ def safe_fetch_ohlcv(ex, symbol, tf,
 
 def safe_fetch_orderbook(ex, symbol, retries=3):
     """
-    Order book fetch karta hai spread check ke liye
+    Order book fetch karta hai
     """
     for i in range(retries):
         try:
@@ -583,7 +575,6 @@ def safe_fetch_orderbook(ex, symbol, retries=3):
 def send_telegram(message):
     """
     Telegram par message bhejta hai
-    3 baar retry karta hai fail hone par
     """
     url = (
         f"https://api.telegram.org/bot"
@@ -605,7 +596,7 @@ def send_telegram(message):
                 f"[TELEGRAM] "
                 f"{attempt+1}/3: {e}")
             time.sleep(3)
-    print("[TELEGRAM] Failed after 3 attempts")
+    print("[TELEGRAM] Failed")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -614,8 +605,7 @@ def send_telegram(message):
 
 def check_spread(ex, symbol):
     """
-    Bid-Ask spread check karta hai
-    Zyada spread = Skip trade
+    Bid Ask spread check karta hai
     """
     try:
         ob = safe_fetch_orderbook(ex, symbol)
@@ -645,8 +635,7 @@ def check_spread(ex, symbol):
 
 def check_volume(df, symbol, mult=VOLUME_MULT):
     """
-    Current volume ko 20 candle average se compare karta hai
-    1.5x se zyada = Strong volume
+    Volume check karta hai
     """
     try:
         avg_vol  = df["volume"].tail(20).mean()
@@ -667,13 +656,12 @@ def check_volume(df, symbol, mult=VOLUME_MULT):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ATR RANGE CHECK — Symbol Specific
+#  ATR RANGE CHECK
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def check_atr_range(symbol, atr_val):
     """
-    ATR value ko symbol ke range se compare karta hai
-    BTC ka range ETH se alag hota hai
+    ATR value symbol ke range se compare karta hai
     """
     ranges = ATR_RANGES.get(symbol, {
         "min": 0.5,
@@ -682,14 +670,12 @@ def check_atr_range(symbol, atr_val):
     if atr_val < ranges["min"]:
         print(
             f"[{symbol}][ATR] "
-            f"Too Low: {atr_val:.4f} "
-            f"< {ranges['min']} ❌")
+            f"Too Low: {atr_val:.4f} ❌")
         return False
     if atr_val > ranges["max"]:
         print(
             f"[{symbol}][ATR] "
-            f"Too High: {atr_val:.4f} "
-            f"> {ranges['max']} ❌")
+            f"Too High: {atr_val:.4f} ❌")
         return False
     print(
         f"[{symbol}][ATR] "
@@ -704,8 +690,6 @@ def check_atr_range(symbol, atr_val):
 def is_good_session():
     """
     Trading session check karta hai
-    London + NY = Best sessions
-    Asian = Sirf high score pe trade
     """
     hour    = datetime.utcnow().hour
     london  = 7 <= hour < 16
@@ -713,13 +697,13 @@ def is_good_session():
     overlap = 12 <= hour < 16
 
     if overlap:
-        session = "London-NY Overlap 🔥 (Best)"
+        session = "London-NY Overlap 🔥"
     elif london:
         session = "London Session ✅"
     elif newyork:
         session = "New York Session ✅"
     else:
-        session = "Asian Session ⚠️ (Weak)"
+        session = "Asian Session ⚠️"
 
     is_good = london or newyork
     print(
@@ -735,7 +719,6 @@ def is_good_session():
 def calc_atr(df, period=7):
     """
     Average True Range calculate karta hai
-    SL aur TP distance ke liye use hota hai
     """
     try:
         high  = df["high"]
@@ -762,8 +745,7 @@ def calc_atr(df, period=7):
 
 def calc_rsi(df, period=14):
     """
-    Relative Strength Index calculate karta hai
-    1m timeframe pe use hota hai entry ke liye
+    RSI calculate karta hai
     """
     try:
         close = df["close"]
@@ -779,7 +761,7 @@ def calc_rsi(df, period=14):
         rs    = avg_g / avg_l
         rsi   = 100 - (100 / (1 + rs))
         val   = float(rsi.iloc[-1])
-        print(f"[RSI-1m] Value={val:.2f}")
+        print(f"[RSI-1m] {val:.2f}")
         return val
     except Exception as e:
         print(f"[RSI ERROR] {e}")
@@ -788,8 +770,7 @@ def calc_rsi(df, period=14):
 
 def check_rsi(rsi_val, direction):
     """
-    RSI value ko direction ke saath compare karta hai
-    BUY ke liye <= 45, SELL ke liye >= 55
+    RSI direction ke saath check karta hai
     """
     if direction == "BUY":
         if rsi_val <= 45:
@@ -802,13 +783,13 @@ def check_rsi(rsi_val, direction):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MOVING AVERAGE — 15m Timeframe
+#  MOVING AVERAGE — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def check_moving_average(df, direction):
     """
     EMA 20 aur EMA 50 check karta hai
-    15m timeframe pe use hota hai trend ke liye
+    1m timeframe pe use hota hai
     """
     try:
         close = df["close"]
@@ -846,9 +827,8 @@ def check_moving_average(df, direction):
                 ok     = False
 
         print(
-            f"[MA-15m] EMA20={ema20:.4f} | "
+            f"[MA-1m] EMA20={ema20:.4f} | "
             f"EMA50={ema50:.4f} | "
-            f"Price={price:.4f} | "
             f"{status}")
         return ok, status, ema20, ema50
 
@@ -858,13 +838,13 @@ def check_moving_average(df, direction):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  BOS / CHOCH DETECTOR
+#  BOS / CHOCH — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_bos_choch(df, swing_bars=2):
     """
-    Break of Structure aur Change of Character detect karta hai
-    15m aur 5m dono timeframes pe use hota hai
+    BOS aur CHOCH detect karta hai
+    1m timeframe pe use hota hai
     """
     try:
         highs  = df["high"].values
@@ -926,7 +906,7 @@ def detect_bos_choch(df, swing_bars=2):
             result = "NONE"
 
         print(
-            f"[BOS/CHOCH] {result} | "
+            f"[BOS/CHOCH-1m] {result} | "
             f"SH={last_sh:.4f} | "
             f"SL={last_sl:.4f}")
 
@@ -954,13 +934,12 @@ def detect_bos_choch(df, swing_bars=2):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  EQUAL HIGHS / EQUAL LOWS — 1m Timeframe
+#  EQUAL LEVELS — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_equal_levels(df, tolerance=0.002):
     """
     Equal Highs aur Equal Lows detect karta hai
-    Liquidity pools identify karne ke liye
     1m timeframe pe use hota hai
     """
     try:
@@ -1000,7 +979,7 @@ def detect_equal_levels(df, tolerance=0.002):
         ) if equal_lows else False
 
         print(
-            f"[EQ LEVELS-1m] "
+            f"[EQ-1m] "
             f"EqH={len(equal_highs)} | "
             f"EqL={len(equal_lows)} | "
             f"NearH={near_eq_high} | "
@@ -1026,16 +1005,14 @@ def detect_equal_levels(df, tolerance=0.002):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MARKET STRUCTURE DETECTOR
+#  MARKET STRUCTURE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_structure(df, swing_bars=2):
     """
     Market structure detect karta hai
-    15m = Main Trend
-    5m  = Confirmation
-    1m  = Entry Structure
-    HH+HL = BULL | LH+LL = BEAR | else = RANGE
+    5m = Main Trend
+    1m = Entry Structure
     """
     try:
         highs = df["high"].values
@@ -1074,14 +1051,13 @@ def detect_structure(df, swing_bars=2):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ORDER BLOCKS — 5m Timeframe
+#  ORDER BLOCKS — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_order_blocks(df, lookback=40):
     """
     Order Blocks detect karta hai
-    Smart Money ke entry zones hote hain
-    5m timeframe pe use hota hai
+    1m timeframe pe use hota hai
     """
     try:
         recent        = df.tail(
@@ -1140,7 +1116,7 @@ def detect_order_blocks(df, lookback=40):
                 })
 
         print(
-            f"[OB-5m] "
+            f"[OB-1m] "
             f"Bull={len(bullish_obs)} | "
             f"Bear={len(bearish_obs)}")
 
@@ -1158,14 +1134,13 @@ def detect_order_blocks(df, lookback=40):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  LIQUIDITY — 5m Timeframe
+#  LIQUIDITY — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_liquidity(df, lookback=40):
     """
     Liquidity levels detect karta hai
-    Sweep hone ke baad reversal aata hai
-    5m timeframe pe use hota hai
+    1m timeframe pe use hota hai
     """
     try:
         recent        = df.tail(lookback)
@@ -1211,7 +1186,7 @@ def detect_liquidity(df, lookback=40):
                 sell_swept = True
 
         print(
-            f"[LIQ-5m] "
+            f"[LIQ-1m] "
             f"BuySweep={buy_swept} | "
             f"SellSweep={sell_swept}")
 
@@ -1234,14 +1209,13 @@ def detect_liquidity(df, lookback=40):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  FAIR VALUE GAP — 5m Timeframe
+#  FVG — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_fvg(df, lookback=30):
     """
     Fair Value Gaps detect karta hai
-    Price gaps jahan market wapas aata hai
-    5m timeframe pe use hota hai
+    1m timeframe pe use hota hai
     """
     try:
         fvgs          = []
@@ -1302,12 +1276,14 @@ def detect_fvg(df, lookback=30):
                         ),
                     })
 
-        bull_fvg = len(
-            [f for f in fvgs if f["type"] == "BULL"])
-        bear_fvg = len(
-            [f for f in fvgs if f["type"] == "BEAR"])
+        bull_fvg = len([
+            f for f in fvgs
+            if f["type"] == "BULL"])
+        bear_fvg = len([
+            f for f in fvgs
+            if f["type"] == "BEAR"])
         print(
-            f"[FVG-5m] "
+            f"[FVG-1m] "
             f"Bull={bull_fvg} | "
             f"Bear={bear_fvg}")
 
@@ -1326,7 +1302,6 @@ def check_rr(entry, sl, tp, direction,
              min_rr=2.0):
     """
     Risk Reward Ratio check karta hai
-    Minimum 1:2 RR chahiye trade ke liye
     """
     try:
         if direction == "BUY":
@@ -1337,9 +1312,7 @@ def check_rr(entry, sl, tp, direction,
             reward = entry - tp
 
         if risk <= 0:
-            print(
-                f"[RR] Risk invalid: "
-                f"{risk:.4f}")
+            print(f"[RR] Risk invalid: {risk:.4f}")
             return False, 0.0
 
         rr = reward / risk
@@ -1359,13 +1332,12 @@ def check_rr(entry, sl, tp, direction,
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  QUICK MARKET SCAN — Loss Hold Decision
+#  QUICK MARKET SCAN
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def quick_market_scan(ex, symbol, position):
     """
     Max hold ke time quick scan karta hai
-    Score >= 7 toh hold karo, nahi toh close karo
     5m aur 1m pe check karta hai
     """
     try:
@@ -1378,9 +1350,6 @@ def quick_market_scan(ex, symbol, position):
             ex, symbol, "5m", 50)
 
         if bars_1m is None or bars_5m is None:
-            print(
-                f"[{symbol}][QUICK SCAN] "
-                f"Data fail")
             return 0, ["Data fail — close"]
 
         df_1m = pd.DataFrame(
@@ -1392,7 +1361,7 @@ def quick_market_scan(ex, symbol, position):
             columns=["time", "open", "high",
                      "low", "close", "volume"])
 
-        # Check 1: 5m Structure (2 pts)
+        # 5m Structure (2 pts)
         structure_5m = detect_structure(df_5m)
         if (position == "BUY" and
                 structure_5m == "BULL"):
@@ -1406,7 +1375,7 @@ def quick_market_scan(ex, symbol, position):
             reasons.append(
                 f"5m {structure_5m} (0)")
 
-        # Check 2: 1m Structure (2 pts)
+        # 1m Structure (2 pts)
         structure_1m = detect_structure(df_1m)
         if (position == "BUY" and
                 structure_1m == "BULL"):
@@ -1420,32 +1389,28 @@ def quick_market_scan(ex, symbol, position):
             reasons.append(
                 f"1m {structure_1m} (0)")
 
-        # Check 3: Order Block 5m (2 pts)
-        obs = detect_order_blocks(df_5m)
+        # OB 1m (2 pts)
+        obs = detect_order_blocks(df_1m)
         if position == "BUY":
             ob_hit = [
                 o for o in obs["bullish_obs"]
                 if o["price_in_ob"]]
             if ob_hit:
                 score += 2
-                reasons.append(
-                    "5m Bullish OB (+2)")
+                reasons.append("1m Bull OB (+2)")
             else:
-                reasons.append(
-                    "5m No Bullish OB (0)")
+                reasons.append("No Bull OB (0)")
         else:
             ob_hit = [
                 o for o in obs["bearish_obs"]
                 if o["price_in_ob"]]
             if ob_hit:
                 score += 2
-                reasons.append(
-                    "5m Bearish OB (+2)")
+                reasons.append("1m Bear OB (+2)")
             else:
-                reasons.append(
-                    "5m No Bearish OB (0)")
+                reasons.append("No Bear OB (0)")
 
-        # Check 4: Volume 1m (2 pts)
+        # Volume 1m (2 pts)
         avg_vol   = (
             df_1m["volume"].tail(20).mean())
         last_vol  = df_1m["volume"].iloc[-1]
@@ -1464,7 +1429,7 @@ def quick_market_scan(ex, symbol, position):
             reasons.append(
                 f"Vol {vol_ratio:.1f}x (0)")
 
-        # Check 5: Momentum 1m (2 pts)
+        # Momentum 1m (2 pts)
         closes = df_1m["close"].tail(5).values
         if position == "BUY":
             going_up = sum(
@@ -1473,14 +1438,14 @@ def quick_market_scan(ex, symbol, position):
             if going_up >= 4:
                 score += 2
                 reasons.append(
-                    f"UP mom {going_up}/4 (+2)")
+                    f"UP {going_up}/4 (+2)")
             elif going_up >= 3:
                 score += 1
                 reasons.append(
-                    f"UP mom {going_up}/4 (+1)")
+                    f"UP {going_up}/4 (+1)")
             else:
                 reasons.append(
-                    f"UP mom {going_up}/4 (0)")
+                    f"UP {going_up}/4 (0)")
         else:
             going_down = sum(
                 1 for i in range(1, len(closes))
@@ -1488,17 +1453,16 @@ def quick_market_scan(ex, symbol, position):
             if going_down >= 4:
                 score += 2
                 reasons.append(
-                    f"DN mom {going_down}/4 (+2)")
+                    f"DN {going_down}/4 (+2)")
             elif going_down >= 3:
                 score += 1
                 reasons.append(
-                    f"DN mom {going_down}/4 (+1)")
+                    f"DN {going_down}/4 (+1)")
             else:
                 reasons.append(
-                    f"DN mom {going_down}/4 (0)")
+                    f"DN {going_down}/4 (0)")
 
-        reasons.append(
-            f"Quick Score: {score}/10")
+        reasons.append(f"Quick Score: {score}/10")
         print(
             f"[{symbol}][QUICK SCAN] "
             f"Score={score}/10")
@@ -1511,154 +1475,106 @@ def quick_market_scan(ex, symbol, position):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  SMART MONEY SCORE — 12 Points (3 Timeframe MTF)
+#  SMART MONEY SCORE — 12 Points (5m + 1m)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def smart_money_score(
-        structure_15m,
         structure_5m,
         structure_1m,
         liq,
         obs,
         fvgs,
-        bos_choch_15m=None,
-        bos_choch_5m=None,
+        bos_choch=None,
         rsi_val=50.0,
         ma_ok=True,
         eq_levels=None,
         volume_ok=True):
     """
-    Multi-Timeframe Smart Money Score Calculator
-    ─────────────────────────────────────────────
-    15m Checks (4 pts) — Main Trend
-      ├── Structure    : 2 pts
-      ├── BOS/CHOCH    : 1 pt
-      └── MA EMA20/50  : 1 pt
+    Smart Money Score — 12 Points
+    ─────────────────────────────
+    5m Checks (2 pts) — Main Trend
+      └── Structure   : 2 pts
 
-    5m Checks (5 pts) — Confirmation
-      ├── Structure    : 1 pt
-      ├── BOS/CHOCH    : 2 pts
-      ├── Order Block  : 1 pt
-      └── FVG + Liq    : 1 pt
-
-    1m Checks (3 pts) — Entry
-      ├── RSI          : 1 pt
-      ├── Equal Levels : 1 pt
-      └── Volume       : 1 pt
-    ─────────────────────────────────────────────
-    Total              : 12 pts
-    Min to Trade       : 8 pts
+    1m Checks (10 pts) — Entry
+      ├── Structure   : 1 pt
+      ├── BOS/CHOCH   : 2 pts
+      ├── Order Block : 2 pts
+      ├── Liquidity   : 1 pt
+      ├── Eq Levels   : 1 pt
+      ├── FVG         : 1 pt
+      ├── RSI         : 1 pt
+      └── MA          : 1 pt
+    ─────────────────────────────
+    Total               : 12 pts
+    Min to Trade        : 8 pts
     """
     points    = 0
     direction = None
     reasons   = []
 
     # ════════════════════════════════════════
-    #  15m CHECKS — 4 Points — MAIN TREND
+    #  5m — MAIN TREND — 2 Points
     # ════════════════════════════════════════
 
-    # Check 1+2: 15m Market Structure (2 pts)
-    # Higher High + Higher Low = BULL
-    # Lower High  + Lower Low  = BEAR
-    if structure_15m == "BULL":
-        points    += 2
-        direction  = "BUY"
+    # Check 1+2: 5m Structure (2 pts)
+    if structure_5m == "BULL":
+        points   += 2
+        direction = "BUY"
         reasons.append(
-            "15m BULL Structure (+2) ✅")
-    elif structure_15m == "BEAR":
-        points    += 2
-        direction  = "SELL"
+            "5m BULL Structure (+2) ✅")
+    elif structure_5m == "BEAR":
+        points   += 2
+        direction = "SELL"
         reasons.append(
-            "15m BEAR Structure (+2) ✅")
+            "5m BEAR Structure (+2) ✅")
     else:
         reasons.append(
-            "15m RANGE — Signal Skip ❌")
+            "5m RANGE — Skip ❌")
         return 0, "WAIT", reasons
 
-    # Check 3: 15m BOS / CHOCH (1 pt)
-    # Break of Structure = Trend continue
-    # Change of Character = Reversal
-    if bos_choch_15m:
-        bos_type_15m = bos_choch_15m.get(
-            "type", "NONE")
-        if (direction == "BUY" and
-                bos_type_15m in [
-                    "BOS_BULL", "CHOCH_BULL"]):
-            points += 1
-            reasons.append(
-                f"15m {bos_type_15m} (+1) ✅")
-        elif (direction == "SELL" and
-              bos_type_15m in [
-                  "BOS_BEAR", "CHOCH_BEAR"]):
-            points += 1
-            reasons.append(
-                f"15m {bos_type_15m} (+1) ✅")
-        else:
-            reasons.append(
-                f"15m BOS/CHOCH="
-                f"{bos_type_15m} (0)")
-    else:
-        reasons.append(
-            "15m BOS/CHOCH N/A (0)")
-
-    # Check 4: 15m Moving Average (1 pt)
-    # EMA20 > EMA50 + Price above = Strong Bull
-    # EMA20 < EMA50 + Price below = Strong Bear
-    if ma_ok:
-        points += 1
-        reasons.append(
-            "15m MA Confirms (+1) ✅")
-    else:
-        reasons.append(
-            "15m MA Against (0) ❌")
-
     # ════════════════════════════════════════
-    #  5m CHECKS — 5 Points — CONFIRMATION
+    #  1m — ENTRY — 10 Points
     # ════════════════════════════════════════
 
-    # Check 5: 5m Structure Confirmation (1 pt)
-    # 15m trend ko 5m confirm karta hai
+    # Check 3: 1m Structure (1 pt)
     if ((direction == "BUY" and
-         structure_5m == "BULL") or
+         structure_1m == "BULL") or
             (direction == "SELL" and
-             structure_5m == "BEAR")):
+             structure_1m == "BEAR")):
         points += 1
         reasons.append(
-            "5m Structure Confirms (+1) ✅")
-    elif structure_5m == "RANGE":
-        reasons.append(
-            "5m RANGE — Weak (0)")
+            "1m Structure Confirms (+1) ✅")
+    elif structure_1m == "RANGE":
+        reasons.append("1m RANGE (0)")
     else:
         reasons.append(
-            "5m Structure Opposite (0) ❌")
+            "1m Structure Opposite (0) ❌")
 
-    # Check 6+7: 5m BOS / CHOCH (2 pts)
-    # 5m pe bhi BOS/CHOCH confirmation chahiye
-    if bos_choch_5m:
-        bos_type_5m = bos_choch_5m.get(
+    # Check 4+5: BOS/CHOCH 1m (2 pts)
+    if bos_choch:
+        bos_type = bos_choch.get(
             "type", "NONE")
         if (direction == "BUY" and
-                bos_type_5m in [
-                    "BOS_BULL", "CHOCH_BULL"]):
+                bos_type in [
+                    "BOS_BULL",
+                    "CHOCH_BULL"]):
             points += 2
             reasons.append(
-                f"5m {bos_type_5m} (+2) ✅")
+                f"1m {bos_type} (+2) ✅")
         elif (direction == "SELL" and
-              bos_type_5m in [
-                  "BOS_BEAR", "CHOCH_BEAR"]):
+              bos_type in [
+                  "BOS_BEAR",
+                  "CHOCH_BEAR"]):
             points += 2
             reasons.append(
-                f"5m {bos_type_5m} (+2) ✅")
+                f"1m {bos_type} (+2) ✅")
         else:
             reasons.append(
-                f"5m BOS/CHOCH="
-                f"{bos_type_5m} (0)")
+                f"1m BOS/CHOCH={bos_type} (0)")
     else:
-        reasons.append(
-            "5m BOS/CHOCH N/A (0)")
+        reasons.append("1m BOS/CHOCH N/A (0)")
 
-    # Check 8: 5m Order Block (1 pt)
-    # Smart Money ke entry zones
+    # Check 6+7: Order Block 1m (2 pts)
     if direction == "BUY":
         ob_hit = [
             ob for ob in obs["bullish_obs"]
@@ -1668,14 +1584,13 @@ def smart_money_score(
                 ob_hit,
                 key=lambda x: x["fresh"],
                 reverse=True)[0]
-            points += 1
+            points += 2
             reasons.append(
-                f"5m Bull OB "
+                f"1m Bull OB "
                 f"{best_ob['bottom']:.4f}-"
-                f"{best_ob['top']:.4f} (+1) ✅")
+                f"{best_ob['top']:.4f} (+2) ✅")
         else:
-            reasons.append(
-                "5m No Bull OB (0)")
+            reasons.append("1m No Bull OB (0)")
     else:
         ob_hit = [
             ob for ob in obs["bearish_obs"]
@@ -1685,82 +1600,29 @@ def smart_money_score(
                 ob_hit,
                 key=lambda x: x["fresh"],
                 reverse=True)[0]
-            points += 1
+            points += 2
             reasons.append(
-                f"5m Bear OB "
+                f"1m Bear OB "
                 f"{best_ob['bottom']:.4f}-"
-                f"{best_ob['top']:.4f} (+1) ✅")
+                f"{best_ob['top']:.4f} (+2) ✅")
         else:
-            reasons.append(
-                "5m No Bear OB (0)")
+            reasons.append("1m No Bear OB (0)")
 
-    # Check 9: 5m FVG + Liquidity (1 pt)
-    # Dono mein se koi ek milne par bhi point milta hai
-    liq_ok = False
-    fvg_ok = False
-
-    if direction == "BUY":
-        if liq["sell_swept"]:
-            liq_ok = True
-        bull_fvg = [
-            f for f in fvgs
-            if f["type"] == "BULL"
-            and f["retest"]]
-        if bull_fvg:
-            fvg_ok = True
-            reasons.append(
-                f"5m Bull FVG "
-                f"{bull_fvg[-1]['bottom']:.4f}-"
-                f"{bull_fvg[-1]['top']:.4f}")
+    # Check 8: Liquidity 1m (1 pt)
+    if (direction == "BUY" and
+            liq["sell_swept"]):
+        points += 1
+        reasons.append(
+            "1m Sell Liq Swept (+1) ✅")
+    elif (direction == "SELL" and
+          liq["buy_swept"]):
+        points += 1
+        reasons.append(
+            "1m Buy Liq Swept (+1) ✅")
     else:
-        if liq["buy_swept"]:
-            liq_ok = True
-        bear_fvg = [
-            f for f in fvgs
-            if f["type"] == "BEAR"
-            and f["retest"]]
-        if bear_fvg:
-            fvg_ok = True
-            reasons.append(
-                f"5m Bear FVG "
-                f"{bear_fvg[-1]['bottom']:.4f}-"
-                f"{bear_fvg[-1]['top']:.4f}")
+        reasons.append("1m No Liq Sweep (0)")
 
-    if liq_ok and fvg_ok:
-        points += 1
-        reasons.append(
-            "5m Liq + FVG Both (+1) ✅")
-    elif liq_ok:
-        points += 1
-        reasons.append(
-            "5m Liq Swept (+1) ✅")
-    elif fvg_ok:
-        points += 1
-        reasons.append(
-            "5m FVG Retest (+1) ✅")
-    else:
-        reasons.append(
-            "5m No Liq/FVG (0)")
-
-    # ════════════════════════════════════════
-    #  1m CHECKS — 3 Points — ENTRY TIMING
-    # ════════════════════════════════════════
-
-    # Check 10: 1m RSI (1 pt)
-    # BUY = RSI <= 45 (oversold)
-    # SELL = RSI >= 55 (overbought)
-    rsi_ok, rsi_msg = check_rsi(
-        rsi_val, direction)
-    if rsi_ok:
-        points += 1
-        reasons.append(
-            f"1m {rsi_msg} (+1) ✅")
-    else:
-        reasons.append(
-            f"1m {rsi_msg} (0)")
-
-    # Check 11: 1m Equal Levels (1 pt)
-    # Liquidity pools near price = good entry
+    # Check 9: Equal Levels 1m (1 pt)
     if eq_levels:
         if (direction == "BUY" and
                 eq_levels["near_eq_low"]):
@@ -1776,30 +1638,63 @@ def smart_money_score(
             reasons.append(
                 "1m No Eq Level (0)")
     else:
-        reasons.append(
-            "1m Eq Level N/A (0)")
+        reasons.append("1m Eq Level N/A (0)")
 
-    # Check 12: 1m Volume (1 pt)
-    # Strong volume = Strong signal
-    if volume_ok:
-        points += 1
-        reasons.append(
-            "1m Volume Strong (+1) ✅")
+    # Check 10: FVG 1m (1 pt)
+    if direction == "BUY":
+        bull_fvg = [
+            f for f in fvgs
+            if f["type"] == "BULL"
+            and f["retest"]]
+        if bull_fvg:
+            points += 1
+            reasons.append(
+                f"1m Bull FVG "
+                f"{bull_fvg[-1]['bottom']:.4f}-"
+                f"{bull_fvg[-1]['top']:.4f} (+1) ✅")
+        else:
+            reasons.append("1m No Bull FVG (0)")
     else:
-        reasons.append(
-            "1m Volume Weak (0) ❌")
+        bear_fvg = [
+            f for f in fvgs
+            if f["type"] == "BEAR"
+            and f["retest"]]
+        if bear_fvg:
+            points += 1
+            reasons.append(
+                f"1m Bear FVG "
+                f"{bear_fvg[-1]['bottom']:.4f}-"
+                f"{bear_fvg[-1]['top']:.4f} (+1) ✅")
+        else:
+            reasons.append("1m No Bear FVG (0)")
 
-    # ════════════════════════════════════════
-    #  FINAL SCORE
-    # ════════════════════════════════════════
+    # Check 11: RSI 1m (1 pt)
+    rsi_ok, rsi_msg = check_rsi(
+        rsi_val, direction)
+    if rsi_ok:
+        points += 1
+        reasons.append(f"1m {rsi_msg} (+1) ✅")
+    else:
+        reasons.append(f"1m {rsi_msg} (0)")
+
+    # Check 12: Moving Average 1m (1 pt)
+    if ma_ok:
+        points += 1
+        reasons.append("1m MA Confirms (+1) ✅")
+    else:
+        reasons.append("1m MA Against (0) ❌")
+
+    # Volume Info
+    if volume_ok:
+        reasons.append("Volume Strong ✅")
+    else:
+        reasons.append("Volume Weak ⚠️")
+
+    # Final Score
+    reasons.append("━━━━━━━━━━━━━━━━━━━━━━")
+    reasons.append(f"Total Score: {points}/12")
+    reasons.append(f"Direction  : {direction}")
     reasons.append(
-        f"━━━━━━━━━━━━━━━━━━━━━━━━")
-    reasons.append(
-        f"Total Score: {points}/12")
-    reasons.append(
-        f"Direction  : {direction}")
-    reasons.append(
-        f"15m={structure_15m} | "
         f"5m={structure_5m} | "
         f"1m={structure_1m}")
 
@@ -1812,9 +1707,7 @@ def smart_money_score(
 
 def calc_pnl(side, entry, exit_price, pos_size):
     """
-    Profit aur Loss calculate karta hai
-    BUY: (exit - entry) * size
-    SELL: (entry - exit) * size
+    PnL calculate karta hai
     """
     if side == "BUY":
         return (exit_price - entry) * pos_size
@@ -1823,14 +1716,12 @@ def calc_pnl(side, entry, exit_price, pos_size):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  DYNAMIC RR — Score Based
+#  DYNAMIC RR
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def get_dynamic_rr(score):
     """
-    Score ke hisaab se SL aur TP multiplier deta hai
-    Score 8 = 1:2 RR
-    Score 12 = 1:4 RR
+    Score ke hisaab se RR deta hai
     """
     score = int(score)
     if score >= 12:
@@ -1868,13 +1759,12 @@ def get_dynamic_rr(score):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  PERIODIC UPDATE — All Symbols Combined
+#  PERIODIC UPDATE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_periodic_update():
     """
-    Har 30 min mein sab symbols ka update bhejta hai
-    Active trades ka PnL aur status dikhata hai
+    Har 30 min mein sab symbols ka update
     """
     time.sleep(UPDATE_INTERVAL)
     while True:
@@ -1882,7 +1772,7 @@ def run_periodic_update():
             now = datetime.now().strftime(
                 "%Y-%m-%d %H:%M:%S")
 
-            msg  = (
+            msg = (
                 f"━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"  SCALP UPDATE\n"
                 f"  {now}\n"
@@ -1896,8 +1786,7 @@ def run_periodic_update():
                 sym_name = sym.split("/")[0]
 
                 with state_lock:
-                    st = dict(
-                        trade_states[sym])
+                    st = dict(trade_states[sym])
 
                 price     = st["last_price"]
                 capital   = st["capital"]
@@ -1908,8 +1797,8 @@ def run_periodic_update():
                 tp        = st["tp_price"]
                 psize     = st["pos_size"]
                 etime     = st["entry_time"]
-                s15m      = st["struct_15m"]
                 s5m       = st["struct_5m"]
+                s1m       = st["struct_1m"]
                 ext_count = st["extension_count"]
                 rr_t      = st["rr_type"]
 
@@ -1957,29 +1846,25 @@ def run_periodic_update():
                         f"TP dist: {tp_dist:.2f}%\n"
                         f"SL dist: {sl_dist:.2f}%\n"
                         f"Score  : {points}/12\n"
-                        f"15m    : {s15m}\n"
                         f"5m     : {s5m}\n"
+                        f"1m     : {s1m}\n"
                         f"RR     : {rr_t}\n"
                         f"Held   : {dur}\n"
                         f"Ext    : "
                         f"{ext_count}/"
                         f"{MAX_EXTENSIONS}\n"
                         f"Cap    : "
-                        f"{capital:.4f} USDT\n"
-                    )
+                        f"{capital:.4f} USDT\n")
                 else:
-                    status_icon = "⏳"
                     msg += (
-                        f"\n{status_icon} "
-                        f"{sym_name}\n"
+                        f"\n⏳ {sym_name}\n"
                         f"Status : WAIT\n"
                         f"Price  : {price:.4f}\n"
                         f"Score  : {points}/12\n"
-                        f"15m    : {s15m}\n"
                         f"5m     : {s5m}\n"
+                        f"1m     : {s1m}\n"
                         f"Cap    : "
-                        f"{capital:.4f} USDT\n"
-                    )
+                        f"{capital:.4f} USDT\n")
 
             msg += (
                 f"\n━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -2000,13 +1885,12 @@ def run_periodic_update():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  DAILY REPORT — All Symbols Combined
+#  DAILY REPORT
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_daily_report():
     """
-    Raat 11:59 IST mein daily report bhejta hai
-    Sab symbols ki combined stats dikhata hai
+    Raat 11:59 IST mein daily report
     """
     while True:
         try:
@@ -2061,16 +1945,14 @@ def run_daily_report():
                             f"Worst   : "
                             f"{daily['worst']:.4f}\n"
                             f"Capital : "
-                            f"{daily['capital']:.4f}\n"
-                        )
+                            f"{daily['capital']:.4f}\n")
 
                         if overall:
                             msg += (
                                 f"Overall : "
                                 f"{overall['total']}T "
                                 f"WR={overall['win_rate']}% "
-                                f"PnL={overall['pnl']:+.4f}\n"
-                            )
+                                f"PnL={overall['pnl']:+.4f}\n")
                     else:
                         msg += (
                             f"\n📊 {sym_name}: "
@@ -2113,22 +1995,21 @@ def run_daily_report():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  DECISION ENGINE — Per Symbol (15m + 5m + 1m MTF)
+#  DECISION ENGINE — Per Symbol (5m + 1m)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_decision_engine_for_symbol(symbol):
     """
     Har symbol ke liye alag decision engine
-    15m = Main Trend
-    5m  = Confirmation + BOS + OB + FVG + Liq
-    1m  = RSI + EqLevels + Volume + Entry
+    5m  = Main Trend
+    1m  = Entry + All Indicators
     Har 60 seconds mein scan karta hai
     """
     exchange = get_exchange()
     sym_name = symbol.split("/")[0]
     print(
         f"[{sym_name}][DECISION] "
-        f"v4.0 MTF Started ✅")
+        f"v4.0 5m+1m Started ✅")
 
     while True:
         try:
@@ -2141,18 +2022,14 @@ def run_decision_engine_for_symbol(symbol):
                 symbol,
                 last_session=session_name)
 
-            # ── Data Fetch — 3 Timeframes ─────────
-            bars_15m = safe_fetch_ohlcv(
-                exchange, symbol, "15m", 100)
-            time.sleep(0.5)
-            bars_5m  = safe_fetch_ohlcv(
+            # ── Data Fetch — 2 Timeframes ─────────
+            bars_5m = safe_fetch_ohlcv(
                 exchange, symbol, "5m", 100)
             time.sleep(0.5)
-            bars_1m  = safe_fetch_ohlcv(
+            bars_1m = safe_fetch_ohlcv(
                 exchange, symbol, "1m", 100)
 
-            if (bars_15m is None or
-                    bars_5m is None or
+            if (bars_5m is None or
                     bars_1m is None):
                 print(
                     f"[{sym_name}][DECISION] "
@@ -2162,25 +2039,19 @@ def run_decision_engine_for_symbol(symbol):
                 continue
 
             # ── DataFrames ────────────────────────
-            df_15m = pd.DataFrame(
-                bars_15m,
-                columns=[
-                    "time", "open", "high",
-                    "low", "close", "volume"])
-            df_5m  = pd.DataFrame(
+            df_5m = pd.DataFrame(
                 bars_5m,
                 columns=[
                     "time", "open", "high",
                     "low", "close", "volume"])
-            df_1m  = pd.DataFrame(
+            df_1m = pd.DataFrame(
                 bars_1m,
                 columns=[
                     "time", "open", "high",
                     "low", "close", "volume"])
 
-            # ── Data Check ───────────────────────
-            if (len(df_15m) < 50 or
-                    len(df_5m) < 50 or
+            # ── Data Check ────────────────────────
+            if (len(df_5m) < 50 or
                     len(df_1m) < 50):
                 print(
                     f"[{sym_name}][DECISION] "
@@ -2188,103 +2059,86 @@ def run_decision_engine_for_symbol(symbol):
                 time.sleep(30)
                 continue
 
-            df_15m["time"] = pd.to_datetime(
-                df_15m["time"], unit="ms")
-            df_5m["time"]  = pd.to_datetime(
-                df_5m["time"],  unit="ms")
-            df_1m["time"]  = pd.to_datetime(
-                df_1m["time"],  unit="ms")
+            df_5m["time"] = pd.to_datetime(
+                df_5m["time"], unit="ms")
+            df_1m["time"] = pd.to_datetime(
+                df_1m["time"], unit="ms")
 
             # ── Current Price ─────────────────────
             current_price = float(
                 df_1m["close"].iloc[-1])
 
-            # ── ATR — 3 Timeframes ────────────────
-            atr_1m  = calc_atr(
-                df_1m,  ATR_PERIOD)
-            atr_5m  = calc_atr(
-                df_5m,  ATR_PERIOD)
-            atr_15m = calc_atr(
-                df_15m, ATR_PERIOD)
+            # ── ATR ───────────────────────────────
+            atr_1m = calc_atr(df_1m, ATR_PERIOD)
+            atr_5m = calc_atr(df_5m, ATR_PERIOD)
 
             print(
                 f"[{sym_name}][ATR] "
                 f"1m={atr_1m:.4f} | "
-                f"5m={atr_5m:.4f} | "
-                f"15m={atr_15m:.4f}")
+                f"5m={atr_5m:.4f}")
 
             # ── Volume — 1m ───────────────────────
             volume_ok = check_volume(
                 df_1m, symbol, VOLUME_MULT)
 
-            # ── Structure — 3 Timeframes ──────────
-            structure_15m = detect_structure(
-                df_15m)
-            structure_5m  = detect_structure(
-                df_5m)
-            structure_1m  = detect_structure(
-                df_1m)
+            # ── Structure — 5m + 1m ───────────────
+            structure_5m = detect_structure(df_5m)
+            structure_1m = detect_structure(df_1m)
 
             print(
                 f"[{sym_name}][STRUCT] "
-                f"15m={structure_15m} | "
                 f"5m={structure_5m} | "
                 f"1m={structure_1m}")
 
-            # ── BOS/CHOCH — 15m + 5m ─────────────
-            bos_choch_15m = detect_bos_choch(
-                df_15m)
-            bos_choch_5m  = detect_bos_choch(
-                df_5m)
+            # ── BOS/CHOCH — 1m ────────────────────
+            bos_choch = detect_bos_choch(df_1m)
 
             print(
-                f"[{sym_name}][BOS] "
-                f"15m={bos_choch_15m['type']} | "
-                f"5m={bos_choch_5m['type']}")
+                f"[{sym_name}][BOS-1m] "
+                f"{bos_choch['type']}")
 
-            # ── Order Block — 5m ──────────────────
-            obs = detect_order_blocks(df_5m)
+            # ── Order Block — 1m ──────────────────
+            obs = detect_order_blocks(df_1m)
 
-            # ── FVG — 5m ──────────────────────────
-            fvgs = detect_fvg(df_5m)
+            # ── FVG — 1m ──────────────────────────
+            fvgs = detect_fvg(df_1m)
 
-            # ── Liquidity — 5m ────────────────────
-            liq = detect_liquidity(df_5m)
+            # ── Liquidity — 1m ────────────────────
+            liq = detect_liquidity(df_1m)
 
             # ── RSI — 1m ──────────────────────────
             rsi_val = calc_rsi(df_1m, 14)
 
             # ── Equal Levels — 1m ─────────────────
-            eq_levels = detect_equal_levels(
-                df_1m)
+            eq_levels = detect_equal_levels(df_1m)
 
-            # ── MA — 15m ──────────────────────────
+            # ── MA — 1m ───────────────────────────
             temp_dir = (
-                "BUY"  if structure_15m == "BULL"
-                else "SELL" if structure_15m == "BEAR"
+                "BUY"
+                if structure_5m == "BULL"
+                else "SELL"
+                if structure_5m == "BEAR"
                 else "BUY")
 
             ma_ok, ma_status, ema20, ema50 = (
                 check_moving_average(
-                    df_15m, temp_dir))
+                    df_1m, temp_dir))
 
             print(
-                f"[{sym_name}][MA-15m] "
+                f"[{sym_name}][MA-1m] "
                 f"Status={ma_status} | "
                 f"EMA20={ema20:.4f} | "
                 f"EMA50={ema50:.4f}")
 
-            # ── Smart Money Score — 12 pts ────────
+            # ── Smart Money Score ─────────────────
             points, direction, reasons = (
                 smart_money_score(
-                    structure_15m,
                     structure_5m,
                     structure_1m,
                     liq,
                     obs,
                     fvgs,
-                    bos_choch_15m=bos_choch_15m,
-                    bos_choch_5m=bos_choch_5m,
+                    bos_choch=bos_choch,
                     rsi_val=rsi_val,
                     ma_ok=ma_ok,
                     eq_levels=eq_levels,
@@ -2294,7 +2148,7 @@ def run_decision_engine_for_symbol(symbol):
             confidence = int(
                 (points / 12) * 100)
 
-            # ── Signal Determine ──────────────────
+            # ── Signal ────────────────────────────
             if (points >= MIN_SCORE and
                     direction == "BUY"):
                 signal = "BUY"
@@ -2304,10 +2158,10 @@ def run_decision_engine_for_symbol(symbol):
             else:
                 signal = "WAIT"
 
-            # ── ATR Filter — Symbol Specific ──────
+            # ── ATR Filter ────────────────────────
             if signal != "WAIT":
                 if not check_atr_range(
-                        symbol, atr_15m):
+                        symbol, atr_5m):
                     print(
                         f"[{sym_name}] "
                         f"ATR Filter — Skip")
@@ -2319,12 +2173,12 @@ def run_decision_engine_for_symbol(symbol):
                 if points >= 10:
                     print(
                         f"[{sym_name}][SESSION] "
-                        f"Asian Score={points}/12 "
-                        f"HIGH — Allowed ✅")
+                        f"Asian {points}/12 "
+                        f"HIGH ✅")
                 else:
                     print(
                         f"[{sym_name}][SESSION] "
-                        f"Asian Score={points}/12 "
+                        f"Asian {points}/12 "
                         f"LOW — Skip ❌")
                     signal = "WAIT"
 
@@ -2335,47 +2189,40 @@ def run_decision_engine_for_symbol(symbol):
                 last_conf=confidence,
                 last_points=points,
                 last_price=current_price,
-                struct_15m=structure_15m,
                 struct_5m=structure_5m,
-                atr_15m=atr_15m,
+                struct_1m=structure_1m,
+                atr_5m=atr_5m,
             )
 
             print(
                 f"[{sym_name}] {scan_time} | "
                 f"Score={points}/12 | "
                 f"Signal={signal} | "
-                f"15m={structure_15m} | "
                 f"5m={structure_5m} | "
                 f"1m={structure_1m} | "
-                f"BOS15={bos_choch_15m['type']} | "
-                f"BOS5={bos_choch_5m['type']} | "
-                f"ATR15m={atr_15m:.4f} | "
+                f"BOS={bos_choch['type']} | "
+                f"ATR5m={atr_5m:.4f} | "
                 f"RSI={rsi_val:.1f} | "
                 f"Price={current_price:.4f} | "
                 f"{session_name}")
 
             # ── Signal Queue ──────────────────────
             signal_data = {
-                "signal":        signal,
-                "confidence":    confidence,
-                "score":         points,
-                "atr_1m":        round(atr_1m,  6),
-                "atr_5m":        round(atr_5m,  6),
-                "atr_15m":       round(atr_15m, 6),
-                "rsi":           round(rsi_val, 2),
-                "ma_status":     ma_status,
-                "time":          scan_time,
-                "reasons":       reasons,
-                "volume_ok":     volume_ok,
-                "session":       session_name,
-                "price":         current_price,
-                "structure_15m": structure_15m,
-                "structure_5m":  structure_5m,
-                "structure_1m":  structure_1m,
-                "bos_15m":       bos_choch_15m[
-                    "type"],
-                "bos_5m":        bos_choch_5m[
-                    "type"],
+                "signal":       signal,
+                "confidence":   confidence,
+                "score":        points,
+                "atr_1m":       round(atr_1m, 6),
+                "atr_5m":       round(atr_5m, 6),
+                "rsi":          round(rsi_val, 2),
+                "ma_status":    ma_status,
+                "time":         scan_time,
+                "reasons":      reasons,
+                "volume_ok":    volume_ok,
+                "session":      session_name,
+                "price":        current_price,
+                "structure_5m": structure_5m,
+                "structure_1m": structure_1m,
+                "bos_1m":       bos_choch["type"],
             }
 
             try:
@@ -2395,24 +2242,19 @@ def run_decision_engine_for_symbol(symbol):
                 log = []
 
             log.append({
-                "time":          scan_time,
-                "signal":        signal,
-                "points":        points,
-                "atr_1m":        round(atr_1m,  6),
-                "atr_5m":        round(atr_5m,  6),
-                "atr_15m":       round(atr_15m, 6),
-                "rsi":           round(rsi_val, 2),
-                "price":         current_price,
-                "session":       session_name,
-                "volume_ok":     volume_ok,
-                "structure_15m": structure_15m,
-                "structure_5m":  structure_5m,
-                "structure_1m":  structure_1m,
-                "bos_15m":       bos_choch_15m[
-                    "type"],
-                "bos_5m":        bos_choch_5m[
-                    "type"],
-                "ma_status":     ma_status,
+                "time":         scan_time,
+                "signal":       signal,
+                "points":       points,
+                "atr_1m":       round(atr_1m, 6),
+                "atr_5m":       round(atr_5m, 6),
+                "rsi":          round(rsi_val, 2),
+                "price":        current_price,
+                "session":      session_name,
+                "volume_ok":    volume_ok,
+                "structure_5m": structure_5m,
+                "structure_1m": structure_1m,
+                "bos_1m":       bos_choch["type"],
+                "ma_status":    ma_status,
             })
             log = log[-3000:]
 
@@ -2441,7 +2283,7 @@ def run_execution_engine_for_symbol(symbol):
     """
     Har symbol ke liye alag execution engine
     Capital = CAPITAL_PER_SYM (Total / 4)
-    Leverage = 5x
+    Leverage = 10x
     Trade Use = 90% of per symbol capital
     """
     ex                 = get_exchange()
@@ -2462,14 +2304,13 @@ def run_execution_engine_for_symbol(symbol):
     rr_type            = "Default"
     signal             = "WAIT"
     score              = 0
-    atr_15m            = 0.0
+    atr_5m             = 0.0
     reason             = ""
     session            = ""
     vol_ok             = True
-    s15m               = "RANGE"
     s5m                = "RANGE"
-    bos15              = "NONE"
-    bos5               = "NONE"
+    s1m                = "RANGE"
+    bos1               = "NONE"
 
     print(
         f"[{sym_name}][EXECUTE] "
@@ -2479,7 +2320,7 @@ def run_execution_engine_for_symbol(symbol):
 
     print(
         f"[{sym_name}][EXECUTE] "
-        f"v4.0 MTF Started! ✅")
+        f"v4.0 5m+1m Started! ✅")
 
     send_telegram(
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -2501,28 +2342,26 @@ def run_execution_engine_for_symbol(symbol):
         f"RR Range : 8=1:2 to 12=1:4\n"
         f"BE Trig  : {BREAK_EVEN_TRIGGER}%\n"
         f"Trail    : {TRAIL_TRIGGER_PCT}%\n"
-        f"TF       : 15m+5m+1m MTF\n"
+        f"TF       : 5m+1m\n"
         f"━━━━━━━━━━━━━━━━━━━━━━"
     )
 
-    # Initial signal values
     signal  = signal_data.get("signal",  "WAIT")
     score   = signal_data.get("score",   0)
-    atr_15m = signal_data.get("atr_15m", 0.0)
+    atr_5m  = signal_data.get("atr_5m",  0.0)
     reason  = " | ".join(
         signal_data.get("reasons", []))
     session = signal_data.get("session", "")
     vol_ok  = signal_data.get("volume_ok", True)
-    s15m    = signal_data.get(
-        "structure_15m", "RANGE")
     s5m     = signal_data.get(
-        "structure_5m",  "RANGE")
-    bos15   = signal_data.get("bos_15m", "NONE")
-    bos5    = signal_data.get("bos_5m",  "NONE")
+        "structure_5m", "RANGE")
+    s1m     = signal_data.get(
+        "structure_1m", "RANGE")
+    bos1    = signal_data.get("bos_1m", "NONE")
 
     while True:
         try:
-            # ── Get Latest Signal ─────────────────
+            # ── Latest Signal ─────────────────────
             try:
                 new_data = (
                     signal_queues[symbol]
@@ -2531,22 +2370,20 @@ def run_execution_engine_for_symbol(symbol):
                     "signal",  "WAIT")
                 score   = new_data.get(
                     "score",   0)
-                atr_15m = new_data.get(
-                    "atr_15m", 0.0)
+                atr_5m  = new_data.get(
+                    "atr_5m",  0.0)
                 reason  = " | ".join(
                     new_data.get("reasons", []))
                 session = new_data.get(
                     "session", "")
                 vol_ok  = new_data.get(
                     "volume_ok", True)
-                s15m    = new_data.get(
-                    "structure_15m", "RANGE")
                 s5m     = new_data.get(
-                    "structure_5m",  "RANGE")
-                bos15   = new_data.get(
-                    "bos_15m", "NONE")
-                bos5    = new_data.get(
-                    "bos_5m",  "NONE")
+                    "structure_5m", "RANGE")
+                s1m     = new_data.get(
+                    "structure_1m", "RANGE")
+                bos1    = new_data.get(
+                    "bos_1m", "NONE")
             except queue.Empty:
                 pass
 
@@ -2596,7 +2433,6 @@ def run_execution_engine_for_symbol(symbol):
                         current_price,
                         pos_size)
 
-                    # Profit mein hai — Close karo
                     if pnl_now >= 0:
                         pnl      = pnl_now
                         capital += pnl
@@ -2617,7 +2453,7 @@ def run_execution_engine_for_symbol(symbol):
                         print(
                             f"[{sym_name}]"
                             f"[MAX HOLD] "
-                            f"Profit Close "
+                            f"Profit "
                             f"PnL={pnl:+.4f}")
                         send_telegram(
                             f"CLOSED — Max Hold ✅\n"
@@ -2631,8 +2467,7 @@ def run_execution_engine_for_symbol(symbol):
                             f"{pnl:+.4f} USDT\n"
                             f"Capital : "
                             f"{capital:.4f} USDT\n"
-                            f"Reason  : "
-                            f"Profit ✅"
+                            f"Reason  : Profit ✅"
                         )
                         position        = None
                         entry_price     = 0.0
@@ -2658,7 +2493,6 @@ def run_execution_engine_for_symbol(symbol):
                         continue
 
                     else:
-                        # Extension limit pahunch gaya
                         if (extension_count >=
                                 MAX_EXTENSIONS):
                             pnl      = pnl_now
@@ -2727,7 +2561,6 @@ def run_execution_engine_for_symbol(symbol):
                             time.sleep(EXECUTE_SCAN)
                             continue
 
-                        # Quick scan karo
                         print(
                             f"[{sym_name}]"
                             f"[MAX HOLD] "
@@ -2851,7 +2684,7 @@ def run_execution_engine_for_symbol(symbol):
                             continue
 
             # ══════════════════════════════════════
-            #  TP ZONE 70-90% EARLY EXIT
+            #  TP ZONE 70-90%
             # ══════════════════════════════════════
             if position is not None:
                 try:
@@ -2990,14 +2823,11 @@ def run_execution_engine_for_symbol(symbol):
                             print(
                                 f"[{sym_name}]"
                                 f"[BE] BUY "
-                                f"SL={sl_price:.4f}"
-                                f" ✅")
+                                f"SL={sl_price:.4f} ✅")
                             send_telegram(
                                 f"BREAK EVEN ✅\n"
-                                f"Symbol : "
-                                f"{sym_name}\n"
-                                f"Side   : "
-                                f"{position}\n"
+                                f"Symbol : {sym_name}\n"
+                                f"Side   : {position}\n"
                                 f"Entry  : "
                                 f"{entry_price:.4f}\n"
                                 f"SL→BE  : "
@@ -3020,14 +2850,11 @@ def run_execution_engine_for_symbol(symbol):
                             print(
                                 f"[{sym_name}]"
                                 f"[BE] SELL "
-                                f"SL={sl_price:.4f}"
-                                f" ✅")
+                                f"SL={sl_price:.4f} ✅")
                             send_telegram(
                                 f"BREAK EVEN ✅\n"
-                                f"Symbol : "
-                                f"{sym_name}\n"
-                                f"Side   : "
-                                f"{position}\n"
+                                f"Symbol : {sym_name}\n"
+                                f"Side   : {position}\n"
                                 f"Entry  : "
                                 f"{entry_price:.4f}\n"
                                 f"SL→BE  : "
@@ -3049,8 +2876,7 @@ def run_execution_engine_for_symbol(symbol):
                             (current_price -
                              entry_price) /
                             entry_price) * 100
-                        if (p_pct >=
-                                TRAIL_TRIGGER_PCT):
+                        if p_pct >= TRAIL_TRIGGER_PCT:
                             new_sl = (
                                 current_price *
                                 (1 -
@@ -3064,15 +2890,13 @@ def run_execution_engine_for_symbol(symbol):
                                 print(
                                     f"[{sym_name}]"
                                     f"[TRAIL] BUY "
-                                    f"SL={sl_price:.4f}"
-                                    f" ✅")
+                                    f"SL={sl_price:.4f} ✅")
                     elif position == "SELL":
                         p_pct = (
                             (entry_price -
                              current_price) /
                             entry_price) * 100
-                        if (p_pct >=
-                                TRAIL_TRIGGER_PCT):
+                        if p_pct >= TRAIL_TRIGGER_PCT:
                             new_sl = (
                                 current_price *
                                 (1 +
@@ -3086,15 +2910,14 @@ def run_execution_engine_for_symbol(symbol):
                                 print(
                                     f"[{sym_name}]"
                                     f"[TRAIL] SELL "
-                                    f"SL={sl_price:.4f}"
-                                    f" ✅")
+                                    f"SL={sl_price:.4f} ✅")
                 except Exception as e:
                     print(
                         f"[{sym_name}]"
                         f"[TRAIL ERROR] {e}")
 
             # ══════════════════════════════════════
-            #  SL / TP HIT CHECK
+            #  SL / TP HIT
             # ══════════════════════════════════════
             if position is not None:
                 hit_sl = (
@@ -3109,7 +2932,7 @@ def run_execution_engine_for_symbol(symbol):
                      current_price <= tp_price))
 
                 if hit_sl or hit_tp:
-                    label    = (
+                    label = (
                         "STOP LOSS ❌"
                         if hit_sl
                         else "TAKE PROFIT ✅")
@@ -3170,10 +2993,9 @@ def run_execution_engine_for_symbol(symbol):
                         f"{capital:.4f} USDT\n"
                         f"RR Type : {rr_type}\n"
                         f"Time    : {duration}\n"
-                        f"15m     : {s15m}\n"
                         f"5m      : {s5m}\n"
-                        f"BOS 15m : {bos15}\n"
-                        f"BOS 5m  : {bos5}\n"
+                        f"1m      : {s1m}\n"
+                        f"BOS 1m  : {bos1}\n"
                         f"Cooldown: {smart_cd}s\n"
                         f"Reason  : {cd_reason}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━"
@@ -3202,7 +3024,7 @@ def run_execution_engine_for_symbol(symbol):
                     continue
 
             # ══════════════════════════════════════
-            #  COOLDOWN CHECK
+            #  COOLDOWN
             # ══════════════════════════════════════
             if (cooldown_end is not None and
                     time.time() < cooldown_end):
@@ -3227,7 +3049,7 @@ def run_execution_engine_for_symbol(symbol):
                     if not spread_ok:
                         print(
                             f"[{sym_name}][{now}]"
-                            f" SKIP — Spread High")
+                            f" SKIP — Spread")
                         time.sleep(EXECUTE_SCAN)
                         continue
 
@@ -3256,28 +3078,24 @@ def run_execution_engine_for_symbol(symbol):
                     sl_mult, tp_mult, rr_type = (
                         get_dynamic_rr(score))
 
-                    # SL / TP Calculation
-                    # ATR 15m use karo SL/TP ke liye
-                    if atr_15m > 0:
+                    # SL/TP — ATR 5m use karo
+                    if atr_5m > 0:
                         sl_pct = (
-                            atr_15m * sl_mult /
+                            atr_5m * sl_mult /
                             current_price) * 100
                         tp_pct = (
-                            atr_15m * tp_mult /
+                            atr_5m * tp_mult /
                             current_price) * 100
                     else:
                         sl_pct = 0.3 * sl_mult
                         tp_pct = 0.3 * tp_mult
 
-                    # Capital Calculation
-                    # Total/4 = Per Symbol Capital
-                    # 90% of that = Trade Capital
+                    # Capital — 90% of per symbol
                     capital_used = (
                         capital *
                         (CAPITAL_USE_PCT / 100))
 
-                    # Position Size
-                    # 5x Leverage
+                    # Position Size — 10x Leverage
                     pos_size = (
                         (capital_used * LEVERAGE) /
                         current_price)
@@ -3330,7 +3148,6 @@ def run_execution_engine_for_symbol(symbol):
                         f"TP={tp_price:.4f} | "
                         f"Score={int(score)}/12 | "
                         f"RR=1:{rr_val} | "
-                        f"{rr_type} | "
                         f"Cap={capital_used:.2f}$")
 
                     send_telegram(
@@ -3354,14 +3171,13 @@ def run_execution_engine_for_symbol(symbol):
                         f"{int(score)}/12\n"
                         f"RR Type : {rr_type}\n"
                         f"RR      : 1:{rr_val}\n"
-                        f"ATR 15m : {atr_15m:.4f}\n"
+                        f"ATR 5m  : {atr_5m:.4f}\n"
                         f"SL Mult : {sl_mult}x\n"
                         f"TP Mult : {tp_mult}x\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"15m     : {s15m}\n"
                         f"5m      : {s5m}\n"
-                        f"BOS 15m : {bos15}\n"
-                        f"BOS 5m  : {bos5}\n"
+                        f"1m      : {s1m}\n"
+                        f"BOS 1m  : {bos1}\n"
                         f"Volume  : "
                         f"{'OK ✅' if vol_ok else 'WEAK ⚠️'}\n"
                         f"Session : {session}\n"
@@ -3376,12 +3192,12 @@ def run_execution_engine_for_symbol(symbol):
                         f"WAIT | "
                         f"Score={int(score)}/12 | "
                         f"Signal={signal} | "
-                        f"15m={s15m} | "
                         f"5m={s5m} | "
+                        f"1m={s1m} | "
                         f"Price={current_price:.4f}")
 
             # ══════════════════════════════════════
-            #  HOLDING — Status Print
+            #  HOLDING STATUS
             # ══════════════════════════════════════
             else:
                 pnl_now = calc_pnl(
@@ -3400,9 +3216,9 @@ def run_execution_engine_for_symbol(symbol):
                     f"{icon} {position} | "
                     f"PnL={pnl_now:+.4f} | "
                     f"Price={current_price:.4f} | "
-                    f"Held={held}s | "
                     f"SL={sl_price:.4f} | "
                     f"TP={tp_price:.4f} | "
+                    f"Held={held}s | "
                     f"Ext={extension_count}/"
                     f"{MAX_EXTENSIONS} | "
                     f"{rr_type}")
@@ -3432,7 +3248,7 @@ def run_execution_engine_for_symbol(symbol):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  START — Multi Symbol + Multi Thread
+#  START
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 if __name__ == "__main__":
@@ -3444,59 +3260,69 @@ if __name__ == "__main__":
 
     print("=" * 60)
     print("  SCALPING BOT v4.0")
-    print("  Multi-Symbol Ultimate SMC Edition")
+    print("  Multi-Symbol SMC Edition")
     print("=" * 60)
-    print(f"  Symbols   : "
-          f"{', '.join([s.split('/')[0] for s in SYMBOLS])}")
-    print(f"  Strategy  : BOS+CHOCH+OB+LIQ+FVG"
-          f"+RSI+MA+EqLevels")
-    print(f"  Timeframes: 15m+5m+1m (MTF)")
+    print(
+        f"  Symbols   : "
+        f"{', '.join([s.split('/')[0] for s in SYMBOLS])}")
+    print(
+        f"  Strategy  : "
+        f"BOS+CHOCH+OB+LIQ+FVG+RSI+MA")
+    print(f"  Timeframes: 5m+1m")
     print(f"  Min Score : {MIN_SCORE}/12")
     print(f"  Total Cap : {TOTAL_CAPITAL} USDT")
-    print(f"  Per Symbol: {CAPITAL_PER_SYM:.4f} USDT")
-    print(f"  Trade Use : "
-          f"{CAPITAL_PER_SYM * CAPITAL_USE_PCT / 100:.4f} USDT")
+    print(
+        f"  Per Symbol: "
+        f"{CAPITAL_PER_SYM:.4f} USDT")
+    print(
+        f"  Trade Use : "
+        f"{CAPITAL_PER_SYM * CAPITAL_USE_PCT / 100:.4f} USDT")
     print(f"  Leverage  : {LEVERAGE}x")
-    print(f"  Exposure  : "
-          f"{CAPITAL_PER_SYM * CAPITAL_USE_PCT / 100 * LEVERAGE:.4f} USDT")
-    print(f"  Dynamic RR: "
-          f"8=1:2 | 10=1:3 | 12=1:4")
-    print(f"  Max Hold  : {MAX_HOLD_SECONDS}s + "
-          f"{MAX_HOLD_EXTENSION}s x "
-          f"{MAX_EXTENSIONS} "
-          f"= {total_max // 60} min max")
+    print(
+        f"  Exposure  : "
+        f"{CAPITAL_PER_SYM * CAPITAL_USE_PCT / 100 * LEVERAGE:.4f} USDT")
+    print(
+        f"  Dynamic RR: "
+        f"8=1:2 | 10=1:3 | 12=1:4")
+    print(
+        f"  Max Hold  : {MAX_HOLD_SECONDS}s + "
+        f"{MAX_HOLD_EXTENSION}s x "
+        f"{MAX_EXTENSIONS} "
+        f"= {total_max // 60} min max")
     print(f"  Asian     : 10/12+ only")
-    print(f"  Break Even: "
-          f"{BREAK_EVEN_TRIGGER}% trigger")
-    print(f"  Trail SL  : "
-          f"{TRAIL_TRIGGER_PCT}% trigger")
+    print(
+        f"  Break Even: "
+        f"{BREAK_EVEN_TRIGGER}% trigger")
+    print(
+        f"  Trail SL  : "
+        f"{TRAIL_TRIGGER_PCT}% trigger")
     print(f"  Min RR    : 1:{MIN_RR}")
     print("=" * 60)
 
     threads = []
 
-    # ── Flask Server ──────────────────────────
+    # Flask Server
     t_flask = threading.Thread(
         target=run_server,
         name="Flask_Server",
         daemon=True)
     threads.append(t_flask)
 
-    # ── Periodic Update ───────────────────────
+    # Periodic Update
     t_update = threading.Thread(
         target=run_periodic_update,
         name="Periodic_Update",
         daemon=True)
     threads.append(t_update)
 
-    # ── Daily Report ──────────────────────────
+    # Daily Report
     t_daily = threading.Thread(
         target=run_daily_report,
         name="Daily_Report",
         daemon=True)
     threads.append(t_daily)
 
-    # ── Decision + Execution — Per Symbol ─────
+    # Decision + Execution — Per Symbol
     for sym in SYMBOLS:
         sym_name = sym.split("/")[0]
 
@@ -3515,27 +3341,31 @@ if __name__ == "__main__":
         threads.append(t_decision)
         threads.append(t_execution)
 
-    # ── Start All Threads ─────────────────────
+    # Start All Threads
     for t in threads:
         t.start()
         time.sleep(0.5)
 
-    print(f"\n[INFO] Total Threads  : "
-          f"{len(threads)}")
-    print(f"[INFO] Symbol Threads : "
-          f"{len(SYMBOLS)} x 2 = "
-          f"{len(SYMBOLS) * 2}")
+    print(
+        f"\n[INFO] Total Threads  : "
+        f"{len(threads)}")
+    print(
+        f"[INFO] Symbol Threads : "
+        f"{len(SYMBOLS)} x 2 = "
+        f"{len(SYMBOLS) * 2}")
     print(f"[INFO] Flask          : Running")
-    print(f"[INFO] Decision       : "
-          f"Har {DECISION_SCAN}s per symbol")
-    print(f"[INFO] Execution      : "
-          f"Har {EXECUTE_SCAN}s per symbol")
-    print(f"[INFO] Update         : "
-          f"Har {UPDATE_INTERVAL//60} min")
+    print(
+        f"[INFO] Decision       : "
+        f"Har {DECISION_SCAN}s per symbol")
+    print(
+        f"[INFO] Execution      : "
+        f"Har {EXECUTE_SCAN}s per symbol")
+    print(
+        f"[INFO] Update         : "
+        f"Har {UPDATE_INTERVAL//60} min")
     print(f"[INFO] Min RR         : 1:{MIN_RR}")
     print(f"[INFO] 24/7           : ON ✅")
     print("=" * 60)
 
-    # ── Main Thread Keep Alive ────────────────
     while True:
         time.sleep(60)
