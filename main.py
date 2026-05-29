@@ -1,8 +1,8 @@
 """
-SCALPING BOT v4.0 — Multi-Symbol Ultimate SMC Edition
+SCALPING BOT v5.0 — Multi-Symbol Ultimate SMC Edition
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Strategy  : Smart Money Concepts (SMC)
-            BOS + CHOCH + OB + LIQ + FVG + RSI + MA
+            BOS + CHOCH + OB + LIQ + FVG
 Symbols   : BTC/USDT, ETH/USDT, SOL/USDT, BNB/USDT
 Timeframes: 5m (Trend) + 1m (Entry)
 Sessions  : 24/7 with Session Filter
@@ -13,6 +13,14 @@ Leverage  : 10x (All Symbols)
 TP Zone   : 70-90% Early Exit
 Max Hold  : 3 min base + Smart Extension
 Dynamic RR: Score Based (1:2 to 1:4)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Score System (12 pts):
+  5m Structure  = 2 pts (Main Trend)
+  1m Liquidity  = 3 pts (BSL/SSL Sweep)
+  1m FVG        = 3 pts (Quality Based)
+  1m BOS/CHOCH  = 2 pts (Confirmation)
+  1m Structure  = 1 pt
+  1m OB         = 1 pt
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
@@ -26,7 +34,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Scalping Bot v4.0 Multi-Symbol SMC Running!"
+    return "Scalping Bot v5.0 Multi-Symbol SMC Running!"
 
 def run_server():
     import os
@@ -62,9 +70,9 @@ CHAT_ID    = "7102976298"
 # ── Capital Config ────────────────────────────────────
 TOTAL_CAPITAL   = 420
 NUM_SYMBOLS     = len(SYMBOLS)
-CAPITAL_PER_SYM = TOTAL_CAPITAL / NUM_SYMBOLS   # 105 per symbol
-CAPITAL_USE_PCT = 90                             # 90% per trade
-LEVERAGE        = 10                             # 10x all symbols
+CAPITAL_PER_SYM = TOTAL_CAPITAL / NUM_SYMBOLS
+CAPITAL_USE_PCT = 90
+LEVERAGE        = 10
 
 # ── Score Config ──────────────────────────────────────
 MIN_SCORE      = 8
@@ -134,9 +142,6 @@ UPDATE_INTERVAL = 1800
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def get_files(symbol):
-    """
-    Har symbol ke liye alag file names
-    """
     name = symbol.replace(
         "/", "_").replace(":", "_")
     return {
@@ -179,9 +184,6 @@ price_caches = {
 
 
 def get_cached_price(ex, symbol, max_age=5):
-    """
-    Cache se price return karta hai
-    """
     cache = price_caches[symbol]
     with cache["lock"]:
         if time.time() - cache["time"] < max_age:
@@ -199,9 +201,6 @@ def get_cached_price(ex, symbol, max_age=5):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def make_trade_state(capital):
-    """
-    Har symbol ke liye fresh trade state
-    """
     return {
         "position":        None,
         "entry_price":     0.0,
@@ -232,9 +231,6 @@ trade_states = {
 
 
 def update_state(symbol, **kwargs):
-    """
-    Thread safe state update
-    """
     with state_lock:
         for key, val in kwargs.items():
             if key in trade_states[symbol]:
@@ -242,9 +238,6 @@ def update_state(symbol, **kwargs):
 
 
 def get_state(symbol, key):
-    """
-    Thread safe state read
-    """
     with state_lock:
         return trade_states[symbol].get(key)
 
@@ -254,9 +247,6 @@ def get_state(symbol, key):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def load_capital(symbol):
-    """
-    Capital file se load karta hai
-    """
     files = get_files(symbol)
     try:
         with open(files["capital"], "r") as f:
@@ -286,9 +276,6 @@ def load_capital(symbol):
 
 
 def save_capital(symbol, capital):
-    """
-    Capital file mein save karta hai
-    """
     files = get_files(symbol)
     try:
         with open(files["capital"], "w") as f:
@@ -303,9 +290,6 @@ def save_capital(symbol, capital):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def save_cooldown(symbol, end_time):
-    """
-    Cooldown end time save karta hai
-    """
     files = get_files(symbol)
     try:
         with open(files["cooldown"], "w") as f:
@@ -316,9 +300,6 @@ def save_cooldown(symbol, end_time):
 
 
 def load_cooldown(symbol):
-    """
-    Cooldown file se load karta hai
-    """
     files = get_files(symbol)
     try:
         with open(files["cooldown"], "r") as f:
@@ -342,9 +323,6 @@ def load_cooldown(symbol):
 def save_trade_history(symbol, side, entry,
                        exit_price, pnl,
                        capital, duration, label):
-    """
-    Trade history file mein save karta hai
-    """
     files = get_files(symbol)
     try:
         try:
@@ -382,9 +360,6 @@ def save_trade_history(symbol, side, entry,
 
 
 def get_daily_stats(symbol):
-    """
-    Aaj ke trades ki stats
-    """
     files = get_files(symbol)
     try:
         with open(
@@ -427,9 +402,6 @@ def get_daily_stats(symbol):
 
 
 def get_overall_stats(symbol):
-    """
-    Sab trades ki overall stats
-    """
     files = get_files(symbol)
     try:
         with open(
@@ -471,9 +443,6 @@ def get_overall_stats(symbol):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def get_exchange():
-    """
-    Binance futures exchange connect karta hai
-    """
     while True:
         try:
             ex = ccxt.binanceusdm({
@@ -492,9 +461,6 @@ def get_exchange():
 
 
 def safe_fetch_ticker(ex, symbol, retries=3):
-    """
-    Symbol ka last price fetch karta hai
-    """
     for i in range(retries):
         try:
             ticker = ex.fetch_ticker(symbol)
@@ -517,9 +483,6 @@ def safe_fetch_ticker(ex, symbol, retries=3):
 
 def safe_fetch_ohlcv(ex, symbol, tf,
                      limit, retries=3):
-    """
-    OHLCV candles fetch karta hai
-    """
     for i in range(retries):
         try:
             bars = ex.fetch_ohlcv(
@@ -544,9 +507,6 @@ def safe_fetch_ohlcv(ex, symbol, tf,
 
 
 def safe_fetch_orderbook(ex, symbol, retries=3):
-    """
-    Order book fetch karta hai
-    """
     for i in range(retries):
         try:
             ob = ex.fetch_order_book(
@@ -573,9 +533,6 @@ def safe_fetch_orderbook(ex, symbol, retries=3):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def send_telegram(message):
-    """
-    Telegram par message bhejta hai
-    """
     url = (
         f"https://api.telegram.org/bot"
         f"{BOT_TOKEN}/sendMessage")
@@ -604,9 +561,6 @@ def send_telegram(message):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def check_spread(ex, symbol):
-    """
-    Bid Ask spread check karta hai
-    """
     try:
         ob = safe_fetch_orderbook(ex, symbol)
         if ob is None:
@@ -634,9 +588,6 @@ def check_spread(ex, symbol):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def check_volume(df, symbol, mult=VOLUME_MULT):
-    """
-    Volume check karta hai
-    """
     try:
         avg_vol  = df["volume"].tail(20).mean()
         last_vol = df["volume"].iloc[-1]
@@ -660,9 +611,6 @@ def check_volume(df, symbol, mult=VOLUME_MULT):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def check_atr_range(symbol, atr_val):
-    """
-    ATR value symbol ke range se compare karta hai
-    """
     ranges = ATR_RANGES.get(symbol, {
         "min": 0.5,
         "max": 500.0
@@ -688,9 +636,6 @@ def check_atr_range(symbol, atr_val):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def is_good_session():
-    """
-    Trading session check karta hai
-    """
     hour    = datetime.utcnow().hour
     london  = 7 <= hour < 16
     newyork = 12 <= hour < 21
@@ -717,9 +662,6 @@ def is_good_session():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def calc_atr(df, period=7):
-    """
-    Average True Range calculate karta hai
-    """
     try:
         high  = df["high"]
         low   = df["low"]
@@ -740,101 +682,44 @@ def calc_atr(df, period=7):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  RSI CALCULATOR
+#  MARKET STRUCTURE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def calc_rsi(df, period=14):
-    """
-    RSI calculate karta hai
-    """
+def detect_structure(df, swing_bars=2):
     try:
-        close = df["close"]
-        delta = close.diff()
-        gain  = delta.where(delta > 0, 0)
-        loss  = -delta.where(delta < 0, 0)
-        avg_g = gain.ewm(
-            span=period,
-            adjust=False).mean()
-        avg_l = loss.ewm(
-            span=period,
-            adjust=False).mean()
-        rs    = avg_g / avg_l
-        rsi   = 100 - (100 / (1 + rs))
-        val   = float(rsi.iloc[-1])
-        print(f"[RSI-1m] {val:.2f}")
-        return val
-    except Exception as e:
-        print(f"[RSI ERROR] {e}")
-        return 50.0
+        highs = df["high"].values
+        lows  = df["low"].values
+        n     = len(highs)
+        swing_highs = []
+        swing_lows  = []
 
+        for i in range(swing_bars, n - swing_bars):
+            if highs[i] == max(
+                    highs[i - swing_bars:
+                           i + swing_bars + 1]):
+                swing_highs.append(highs[i])
+            if lows[i] == min(
+                    lows[i - swing_bars:
+                          i + swing_bars + 1]):
+                swing_lows.append(lows[i])
 
-def check_rsi(rsi_val, direction):
-    """
-    RSI direction ke saath check karta hai
-    """
-    if direction == "BUY":
-        if rsi_val <= 45:
-            return True, f"RSI {rsi_val:.1f} BUY ✅"
-        return False, f"RSI {rsi_val:.1f} not BUY"
-    else:
-        if rsi_val >= 55:
-            return True, f"RSI {rsi_val:.1f} SELL ✅"
-        return False, f"RSI {rsi_val:.1f} not SELL"
+        if (len(swing_highs) < 2 or
+                len(swing_lows) < 2):
+            return "RANGE"
 
+        hh = swing_highs[-1] > swing_highs[-2]
+        hl = swing_lows[-1]  > swing_lows[-2]
+        lh = swing_highs[-1] < swing_highs[-2]
+        ll = swing_lows[-1]  < swing_lows[-2]
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MOVING AVERAGE — 1m Timeframe
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        if hh and hl:
+            return "BULL"
+        elif lh and ll:
+            return "BEAR"
+        return "RANGE"
 
-def check_moving_average(df, direction):
-    """
-    EMA 20 aur EMA 50 check karta hai
-    1m timeframe pe use hota hai
-    """
-    try:
-        close = df["close"]
-        ema20 = float(
-            close.ewm(
-                span=20,
-                adjust=False
-            ).mean().iloc[-1])
-        ema50 = float(
-            close.ewm(
-                span=50,
-                adjust=False
-            ).mean().iloc[-1])
-        price = float(close.iloc[-1])
-
-        if direction == "BUY":
-            if price > ema20 and ema20 > ema50:
-                status = "STRONG_BULL"
-                ok     = True
-            elif price > ema20:
-                status = "WEAK_BULL"
-                ok     = True
-            else:
-                status = "BEARISH"
-                ok     = False
-        else:
-            if price < ema20 and ema20 < ema50:
-                status = "STRONG_BEAR"
-                ok     = True
-            elif price < ema20:
-                status = "WEAK_BEAR"
-                ok     = True
-            else:
-                status = "BULLISH"
-                ok     = False
-
-        print(
-            f"[MA-1m] EMA20={ema20:.4f} | "
-            f"EMA50={ema50:.4f} | "
-            f"{status}")
-        return ok, status, ema20, ema50
-
-    except Exception as e:
-        print(f"[MA ERROR] {e}")
-        return True, "ERROR", 0.0, 0.0
+    except Exception:
+        return "RANGE"
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -842,10 +727,6 @@ def check_moving_average(df, direction):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_bos_choch(df, swing_bars=2):
-    """
-    BOS aur CHOCH detect karta hai
-    1m timeframe pe use hota hai
-    """
     try:
         highs  = df["high"].values
         lows   = df["low"].values
@@ -934,131 +815,10 @@ def detect_bos_choch(df, swing_bars=2):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  EQUAL LEVELS — 1m Timeframe
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def detect_equal_levels(df, tolerance=0.002):
-    """
-    Equal Highs aur Equal Lows detect karta hai
-    1m timeframe pe use hota hai
-    """
-    try:
-        highs         = df["high"].tail(50).values
-        lows          = df["low"].tail(50).values
-        current_price = float(df["close"].iloc[-1])
-        n             = len(highs)
-        equal_highs   = []
-        equal_lows    = []
-
-        for i in range(n):
-            for j in range(i + 1, n):
-                diff_h = abs(highs[i] - highs[j])
-                avg_h  = (highs[i] + highs[j]) / 2
-                if (avg_h > 0 and
-                        diff_h / avg_h <= tolerance):
-                    equal_highs.append(
-                        round(avg_h, 4))
-
-                diff_l = abs(lows[i] - lows[j])
-                avg_l  = (lows[i] + lows[j]) / 2
-                if (avg_l > 0 and
-                        diff_l / avg_l <= tolerance):
-                    equal_lows.append(
-                        round(avg_l, 4))
-
-        near_eq_high = any(
-            abs(current_price - h) /
-            current_price <= 0.003
-            for h in equal_highs
-        ) if equal_highs else False
-
-        near_eq_low = any(
-            abs(current_price - l) /
-            current_price <= 0.003
-            for l in equal_lows
-        ) if equal_lows else False
-
-        print(
-            f"[EQ-1m] "
-            f"EqH={len(equal_highs)} | "
-            f"EqL={len(equal_lows)} | "
-            f"NearH={near_eq_high} | "
-            f"NearL={near_eq_low}")
-
-        return {
-            "equal_highs":  list(
-                set(equal_highs))[-3:],
-            "equal_lows":   list(
-                set(equal_lows))[-3:],
-            "near_eq_high": near_eq_high,
-            "near_eq_low":  near_eq_low,
-        }
-
-    except Exception as e:
-        print(f"[EQ LEVELS ERROR] {e}")
-        return {
-            "equal_highs":  [],
-            "equal_lows":   [],
-            "near_eq_high": False,
-            "near_eq_low":  False,
-        }
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MARKET STRUCTURE
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def detect_structure(df, swing_bars=2):
-    """
-    Market structure detect karta hai
-    5m = Main Trend
-    1m = Entry Structure
-    """
-    try:
-        highs = df["high"].values
-        lows  = df["low"].values
-        n     = len(highs)
-        swing_highs = []
-        swing_lows  = []
-
-        for i in range(swing_bars, n - swing_bars):
-            if highs[i] == max(
-                    highs[i - swing_bars:
-                           i + swing_bars + 1]):
-                swing_highs.append(highs[i])
-            if lows[i] == min(
-                    lows[i - swing_bars:
-                          i + swing_bars + 1]):
-                swing_lows.append(lows[i])
-
-        if (len(swing_highs) < 2 or
-                len(swing_lows) < 2):
-            return "RANGE"
-
-        hh = swing_highs[-1] > swing_highs[-2]
-        hl = swing_lows[-1]  > swing_lows[-2]
-        lh = swing_highs[-1] < swing_highs[-2]
-        ll = swing_lows[-1]  < swing_lows[-2]
-
-        if hh and hl:
-            return "BULL"
-        elif lh and ll:
-            return "BEAR"
-        return "RANGE"
-
-    except Exception:
-        return "RANGE"
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  ORDER BLOCKS — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_order_blocks(df, lookback=40):
-    """
-    Order Blocks detect karta hai
-    1m timeframe pe use hota hai
-    """
     try:
         recent        = df.tail(
             lookback).reset_index(drop=True)
@@ -1134,88 +894,257 @@ def detect_order_blocks(df, lookback=40):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  LIQUIDITY — 1m Timeframe
+#  LIQUIDITY — UPGRADED v2.0 — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def detect_liquidity(df, lookback=40):
+def detect_liquidity(df, lookback=50):
     """
-    Liquidity levels detect karta hai
-    1m timeframe pe use hota hai
+    Liquidity Detection — Full SMC Style
+
+    Types:
+    ├── BSL (Buy Side Liquidity)
+    │   └── Highs ke upar stops hote hai
+    │       Sweep hone pe = SELL setup
+    │
+    ├── SSL (Sell Side Liquidity)
+    │   └── Lows ke neeche stops hote hai
+    │       Sweep hone pe = BUY setup
+    │
+    ├── Equal Highs = Strongest BSL
+    └── Equal Lows  = Strongest SSL
+
+    Sweep Quality:
+    ├── STRONG = Equal H/L sweep
+    ├── NORMAL = Regular swing sweep
+    └── WEAK   = Small level sweep
     """
     try:
-        recent        = df.tail(lookback)
+        recent        = df.tail(lookback).reset_index(drop=True)
         highs         = recent["high"].values
         lows          = recent["low"].values
-        current_price = df["close"].iloc[-1]
+        closes        = recent["close"].values
+        volumes       = recent["volume"].values
+        current_price = float(closes[-1])
         n             = len(highs)
         swing_bars    = 2
-        buy_liq       = []
-        sell_liq      = []
+        avg_volume    = float(recent["volume"].mean())
+
+        # ── Swing Points ──────────────────────────
+        bsl_levels = []
+        ssl_levels = []
 
         for i in range(swing_bars, n - swing_bars):
             if highs[i] == max(
                     highs[i - swing_bars:
                            i + swing_bars + 1]):
-                buy_liq.append(highs[i])
+                bsl_levels.append({
+                    "price":  highs[i],
+                    "idx":    i,
+                    "volume": volumes[i],
+                })
             if lows[i] == min(
                     lows[i - swing_bars:
                           i + swing_bars + 1]):
-                sell_liq.append(lows[i])
+                ssl_levels.append({
+                    "price":  lows[i],
+                    "idx":    i,
+                    "volume": volumes[i],
+                })
 
-        buy_swept  = False
-        sell_swept = False
+        # ── Equal Highs / Equal Lows ──────────────
+        eq_tolerance = 0.002
+        equal_highs  = []
+        equal_lows   = []
 
-        if buy_liq:
-            last_high = buy_liq[-1]
-            recent_5  = df.tail(5)
-            tolerance = last_high * 0.002
-            if (any(recent_5["high"] >
-                    last_high - tolerance) and
-                    current_price <
-                    last_high + tolerance):
-                buy_swept = True
+        for i in range(len(bsl_levels)):
+            for j in range(i + 1, len(bsl_levels)):
+                p1   = bsl_levels[i]["price"]
+                p2   = bsl_levels[j]["price"]
+                diff = abs(p1 - p2) / p1
+                if diff <= eq_tolerance:
+                    equal_highs.append(
+                        round((p1 + p2) / 2, 4))
 
-        if sell_liq:
-            last_low  = sell_liq[-1]
-            recent_5  = df.tail(5)
-            tolerance = last_low * 0.002
-            if (any(recent_5["low"] <
-                    last_low + tolerance) and
-                    current_price >
-                    last_low - tolerance):
-                sell_swept = True
+        for i in range(len(ssl_levels)):
+            for j in range(i + 1, len(ssl_levels)):
+                p1   = ssl_levels[i]["price"]
+                p2   = ssl_levels[j]["price"]
+                diff = abs(p1 - p2) / p1
+                if diff <= eq_tolerance:
+                    equal_lows.append(
+                        round((p1 + p2) / 2, 4))
+
+        # ── BSL Sweep Check ───────────────────────
+        bsl_swept         = False
+        bsl_sweep_quality = "NONE"
+        bsl_swept_price   = 0.0
+
+        if bsl_levels:
+            last_bsl      = bsl_levels[-1]["price"]
+            tolerance_bsl = last_bsl * 0.002
+            recent_5      = recent.tail(5)
+            swept         = any(
+                recent_5["high"] >
+                last_bsl - tolerance_bsl)
+            came_back     = (
+                current_price <
+                last_bsl + tolerance_bsl)
+
+            if swept and came_back:
+                bsl_swept       = True
+                bsl_swept_price = last_bsl
+
+                is_equal_high = any(
+                    abs(last_bsl - eh) /
+                    last_bsl <= eq_tolerance
+                    for eh in equal_highs)
+
+                prev_prices = [
+                    b["price"]
+                    for b in bsl_levels[:-1]]
+
+                if is_equal_high:
+                    bsl_sweep_quality = "STRONG"
+                elif (prev_prices and
+                      last_bsl > max(prev_prices)):
+                    bsl_sweep_quality = "NORMAL"
+                else:
+                    bsl_sweep_quality = "WEAK"
+
+        # ── SSL Sweep Check ───────────────────────
+        ssl_swept         = False
+        ssl_sweep_quality = "NONE"
+        ssl_swept_price   = 0.0
+
+        if ssl_levels:
+            last_ssl      = ssl_levels[-1]["price"]
+            tolerance_ssl = last_ssl * 0.002
+            recent_5      = recent.tail(5)
+            swept         = any(
+                recent_5["low"] <
+                last_ssl + tolerance_ssl)
+            came_back     = (
+                current_price >
+                last_ssl - tolerance_ssl)
+
+            if swept and came_back:
+                ssl_swept       = True
+                ssl_swept_price = last_ssl
+
+                is_equal_low = any(
+                    abs(last_ssl - el) /
+                    last_ssl <= eq_tolerance
+                    for el in equal_lows)
+
+                prev_prices = [
+                    s["price"]
+                    for s in ssl_levels[:-1]]
+
+                if is_equal_low:
+                    ssl_sweep_quality = "STRONG"
+                elif (prev_prices and
+                      last_ssl < min(prev_prices)):
+                    ssl_sweep_quality = "NORMAL"
+                else:
+                    ssl_sweep_quality = "WEAK"
+
+        # ── Near Level Check ──────────────────────
+        near_bsl = False
+        near_ssl = False
+
+        if bsl_levels:
+            last_bsl = bsl_levels[-1]["price"]
+            near_bsl = (
+                abs(current_price - last_bsl) /
+                current_price) <= 0.005
+
+        if ssl_levels:
+            last_ssl = ssl_levels[-1]["price"]
+            near_ssl = (
+                abs(current_price - last_ssl) /
+                current_price) <= 0.005
 
         print(
             f"[LIQ-1m] "
-            f"BuySweep={buy_swept} | "
-            f"SellSweep={sell_swept}")
+            f"BSL={len(bsl_levels)} | "
+            f"SSL={len(ssl_levels)} | "
+            f"EqH={len(equal_highs)} | "
+            f"EqL={len(equal_lows)} | "
+            f"BSLswept={bsl_swept}"
+            f"({bsl_sweep_quality}) | "
+            f"SSLswept={ssl_swept}"
+            f"({ssl_sweep_quality})")
 
         return {
-            "buy_swept":   buy_swept,
-            "sell_swept":  sell_swept,
-            "buy_levels":  (buy_liq[-3:]
-                            if buy_liq else []),
-            "sell_levels": (sell_liq[-3:]
-                            if sell_liq else []),
+            # BUY setup = SSL sweep
+            # SELL setup = BSL sweep
+            "buy_swept":          ssl_swept,
+            "sell_swept":         bsl_swept,
+            "bsl_swept":          bsl_swept,
+            "ssl_swept":          ssl_swept,
+            "bsl_sweep_quality":  bsl_sweep_quality,
+            "ssl_sweep_quality":  ssl_sweep_quality,
+            "bsl_swept_price":    bsl_swept_price,
+            "ssl_swept_price":    ssl_swept_price,
+            "bsl_levels":  [
+                b["price"]
+                for b in bsl_levels[-3:]],
+            "ssl_levels":  [
+                s["price"]
+                for s in ssl_levels[-3:]],
+            "equal_highs": list(
+                set(equal_highs))[-3:],
+            "equal_lows":  list(
+                set(equal_lows))[-3:],
+            "near_bsl":    near_bsl,
+            "near_ssl":    near_ssl,
+            "buy_levels":  [
+                s["price"]
+                for s in ssl_levels[-3:]],
+            "sell_levels": [
+                b["price"]
+                for b in bsl_levels[-3:]],
         }
 
-    except Exception:
+    except Exception as e:
+        print(f"[LIQ ERROR] {e}")
         return {
-            "buy_swept":   False,
-            "sell_swept":  False,
-            "buy_levels":  [],
-            "sell_levels": [],
+            "buy_swept":          False,
+            "sell_swept":         False,
+            "bsl_swept":          False,
+            "ssl_swept":          False,
+            "bsl_sweep_quality":  "NONE",
+            "ssl_sweep_quality":  "NONE",
+            "bsl_swept_price":    0.0,
+            "ssl_swept_price":    0.0,
+            "bsl_levels":         [],
+            "ssl_levels":         [],
+            "equal_highs":        [],
+            "equal_lows":         [],
+            "near_bsl":           False,
+            "near_ssl":           False,
+            "buy_levels":         [],
+            "sell_levels":        [],
         }
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  FVG — 1m Timeframe
+#  FVG — UPGRADED v2.0 — 1m Timeframe
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def detect_fvg(df, lookback=30):
     """
-    Fair Value Gaps detect karta hai
-    1m timeframe pe use hota hai
+    Fair Value Gaps — Quality Based
+
+    FVG Score:
+    ├── Size   : Bada gap = +1
+    ├── Fresh  : Last 8 candles = +1
+    └── Volume : High volume = +1
+
+    Quality:
+    ├── STRONG = Score 2.5+
+    ├── GOOD   = Score 1.5+
+    └── WEAK   = Score < 1.5
     """
     try:
         fvgs          = []
@@ -1223,69 +1152,166 @@ def detect_fvg(df, lookback=30):
             lookback).reset_index(drop=True)
         n             = len(recent)
         current_price = recent["close"].iloc[-1]
+        avg_volume    = recent["volume"].mean()
 
         for i in range(2, n):
             c1 = recent.iloc[i - 2]
+            c2 = recent.iloc[i - 1]
             c3 = recent.iloc[i]
 
+            # ── BULLISH FVG ───────────────────────
             if c1["high"] < c3["low"]:
-                gap_size = (
-                    (c3["low"] - c1["high"]) /
-                    c1["high"]) * 100
-                if gap_size >= 0.02:
-                    tolerance = (
-                        c3["low"] -
-                        c1["high"]) * 0.3
-                    fvgs.append({
-                        "type":   "BULL",
-                        "top":    round(
-                            c3["low"], 4),
-                        "bottom": round(
-                            c1["high"], 4),
-                        "size":   round(
-                            gap_size, 3),
-                        "fresh":  (i >= n - 8),
-                        "retest": (
-                            c1["high"] - tolerance
-                            <= current_price
-                            <= c3["low"] + tolerance
-                        ),
-                    })
+                gap_top    = c3["low"]
+                gap_bottom = c1["high"]
+                gap_size   = (
+                    (gap_top - gap_bottom) /
+                    gap_bottom) * 100
 
+                if gap_size < 0.02:
+                    continue
+
+                fvg_score = 0
+
+                if gap_size >= 0.1:
+                    fvg_score += 1
+                elif gap_size >= 0.05:
+                    fvg_score += 0.5
+
+                is_fresh = (i >= n - 8)
+                if is_fresh:
+                    fvg_score += 1
+
+                gap_volume  = c2["volume"]
+                high_volume = (
+                    gap_volume >
+                    avg_volume * 1.3)
+                if high_volume:
+                    fvg_score += 1
+
+                tolerance = (
+                    gap_top - gap_bottom) * 0.3
+                in_zone   = (
+                    gap_bottom - tolerance
+                    <= current_price
+                    <= gap_top + tolerance)
+
+                test_count = 0
+                for j in range(i + 1, n):
+                    c_check = recent.iloc[j]
+                    if (gap_bottom - tolerance
+                            <= c_check["low"]
+                            <= gap_top + tolerance):
+                        test_count += 1
+
+                if test_count >= 3:
+                    fvg_score -= 1
+
+                fvg_score = max(0, fvg_score)
+
+                fvgs.append({
+                    "type":        "BULL",
+                    "top":         round(gap_top, 4),
+                    "bottom":      round(gap_bottom, 4),
+                    "size":        round(gap_size, 3),
+                    "score":       round(fvg_score, 1),
+                    "fresh":       is_fresh,
+                    "high_volume": high_volume,
+                    "test_count":  test_count,
+                    "retest":      in_zone,
+                    "quality": (
+                        "STRONG"
+                        if fvg_score >= 2.5
+                        else "GOOD"
+                        if fvg_score >= 1.5
+                        else "WEAK"),
+                })
+
+            # ── BEARISH FVG ───────────────────────
             elif c1["low"] > c3["high"]:
-                gap_size = (
-                    (c1["low"] - c3["high"]) /
-                    c3["high"]) * 100
-                if gap_size >= 0.02:
-                    tolerance = (
-                        c1["low"] -
-                        c3["high"]) * 0.3
-                    fvgs.append({
-                        "type":   "BEAR",
-                        "top":    round(
-                            c1["low"], 4),
-                        "bottom": round(
-                            c3["high"], 4),
-                        "size":   round(
-                            gap_size, 3),
-                        "fresh":  (i >= n - 8),
-                        "retest": (
-                            c3["high"] - tolerance
-                            <= current_price
-                            <= c1["low"] + tolerance
-                        ),
-                    })
+                gap_top    = c1["low"]
+                gap_bottom = c3["high"]
+                gap_size   = (
+                    (gap_top - gap_bottom) /
+                    gap_bottom) * 100
 
-        bull_fvg = len([
+                if gap_size < 0.02:
+                    continue
+
+                fvg_score = 0
+
+                if gap_size >= 0.1:
+                    fvg_score += 1
+                elif gap_size >= 0.05:
+                    fvg_score += 0.5
+
+                is_fresh = (i >= n - 8)
+                if is_fresh:
+                    fvg_score += 1
+
+                gap_volume  = c2["volume"]
+                high_volume = (
+                    gap_volume >
+                    avg_volume * 1.3)
+                if high_volume:
+                    fvg_score += 1
+
+                tolerance = (
+                    gap_top - gap_bottom) * 0.3
+                in_zone   = (
+                    gap_bottom - tolerance
+                    <= current_price
+                    <= gap_top + tolerance)
+
+                test_count = 0
+                for j in range(i + 1, n):
+                    c_check = recent.iloc[j]
+                    if (gap_bottom - tolerance
+                            <= c_check["high"]
+                            <= gap_top + tolerance):
+                        test_count += 1
+
+                if test_count >= 3:
+                    fvg_score -= 1
+
+                fvg_score = max(0, fvg_score)
+
+                fvgs.append({
+                    "type":        "BEAR",
+                    "top":         round(gap_top, 4),
+                    "bottom":      round(gap_bottom, 4),
+                    "size":        round(gap_size, 3),
+                    "score":       round(fvg_score, 1),
+                    "fresh":       is_fresh,
+                    "high_volume": high_volume,
+                    "test_count":  test_count,
+                    "retest":      in_zone,
+                    "quality": (
+                        "STRONG"
+                        if fvg_score >= 2.5
+                        else "GOOD"
+                        if fvg_score >= 1.5
+                        else "WEAK"),
+                })
+
+        bull_fvg    = [
             f for f in fvgs
-            if f["type"] == "BULL"])
-        bear_fvg = len([
+            if f["type"] == "BULL"]
+        bear_fvg    = [
             f for f in fvgs
-            if f["type"] == "BEAR"])
+            if f["type"] == "BEAR"]
+        strong_bull = [
+            f for f in bull_fvg
+            if f["quality"] == "STRONG"]
+        strong_bear = [
+            f for f in bear_fvg
+            if f["quality"] == "STRONG"]
+
         print(
             f"[FVG-1m] "
-            f"Bull={bull_fvg} | "
-            f"Bear={bear_fvg}")
+            f"Bull={len(bull_fvg)}"
+            f"(Strong={len(strong_bull)}) | "
+            f"Bear={len(bear_fvg)}"
+            f"(Strong={len(strong_bear)})")
 
         return fvgs
 
@@ -1300,9 +1326,6 @@ def detect_fvg(df, lookback=30):
 
 def check_rr(entry, sl, tp, direction,
              min_rr=2.0):
-    """
-    Risk Reward Ratio check karta hai
-    """
     try:
         if direction == "BUY":
             risk   = entry - sl
@@ -1312,7 +1335,8 @@ def check_rr(entry, sl, tp, direction,
             reward = entry - tp
 
         if risk <= 0:
-            print(f"[RR] Risk invalid: {risk:.4f}")
+            print(
+                f"[RR] Risk invalid: {risk:.4f}")
             return False, 0.0
 
         rr = reward / risk
@@ -1336,10 +1360,6 @@ def check_rr(entry, sl, tp, direction,
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def quick_market_scan(ex, symbol, position):
-    """
-    Max hold ke time quick scan karta hai
-    5m aur 1m pe check karta hai
-    """
     try:
         score   = 0
         reasons = []
@@ -1397,7 +1417,8 @@ def quick_market_scan(ex, symbol, position):
                 if o["price_in_ob"]]
             if ob_hit:
                 score += 2
-                reasons.append("1m Bull OB (+2)")
+                reasons.append(
+                    "1m Bull OB (+2)")
             else:
                 reasons.append("No Bull OB (0)")
         else:
@@ -1406,7 +1427,8 @@ def quick_market_scan(ex, symbol, position):
                 if o["price_in_ob"]]
             if ob_hit:
                 score += 2
-                reasons.append("1m Bear OB (+2)")
+                reasons.append(
+                    "1m Bear OB (+2)")
             else:
                 reasons.append("No Bear OB (0)")
 
@@ -1475,7 +1497,7 @@ def quick_market_scan(ex, symbol, position):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  SMART MONEY SCORE — 12 Points (5m + 1m)
+#  SMART MONEY SCORE — UPGRADED v2.0 — 12 Points
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def smart_money_score(
@@ -1485,28 +1507,19 @@ def smart_money_score(
         obs,
         fvgs,
         bos_choch=None,
-        rsi_val=50.0,
-        ma_ok=True,
-        eq_levels=None,
         volume_ok=True):
     """
-    Smart Money Score — 12 Points
-    ─────────────────────────────
-    5m Checks (2 pts) — Main Trend
-      └── Structure   : 2 pts
-
-    1m Checks (10 pts) — Entry
-      ├── Structure   : 1 pt
-      ├── BOS/CHOCH   : 2 pts
-      ├── Order Block : 2 pts
-      ├── Liquidity   : 1 pt
-      ├── Eq Levels   : 1 pt
-      ├── FVG         : 1 pt
-      ├── RSI         : 1 pt
-      └── MA          : 1 pt
-    ─────────────────────────────
-    Total               : 12 pts
-    Min to Trade        : 8 pts
+    Smart Money Score — v2.0 — 12 Points
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    5m Structure  = 2 pts  (Main Trend)
+    1m Liquidity  = 3 pts  (BSL/SSL Sweep)
+    1m FVG        = 3 pts  (Quality Based)
+    1m BOS/CHOCH  = 2 pts  (Confirmation)
+    1m Structure  = 1 pt
+    1m OB         = 1 pt
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    Total         = 12 pts
+    Min to Trade  = 8 pts
     """
     points    = 0
     direction = None
@@ -1516,7 +1529,6 @@ def smart_money_score(
     #  5m — MAIN TREND — 2 Points
     # ════════════════════════════════════════
 
-    # Check 1+2: 5m Structure (2 pts)
     if structure_5m == "BULL":
         points   += 2
         direction = "BUY"
@@ -1533,27 +1545,169 @@ def smart_money_score(
         return 0, "WAIT", reasons
 
     # ════════════════════════════════════════
-    #  1m — ENTRY — 10 Points
+    #  1m — LIQUIDITY — 3 Points
     # ════════════════════════════════════════
 
-    # Check 3: 1m Structure (1 pt)
-    if ((direction == "BUY" and
-         structure_1m == "BULL") or
-            (direction == "SELL" and
-             structure_1m == "BEAR")):
-        points += 1
-        reasons.append(
-            "1m Structure Confirms (+1) ✅")
-    elif structure_1m == "RANGE":
-        reasons.append("1m RANGE (0)")
-    else:
-        reasons.append(
-            "1m Structure Opposite (0) ❌")
+    liq_points = 0
+    liq_reason = ""
 
-    # Check 4+5: BOS/CHOCH 1m (2 pts)
+    if direction == "BUY":
+        if liq["ssl_swept"]:
+            quality = liq.get(
+                "ssl_sweep_quality", "NORMAL")
+            if quality == "STRONG":
+                liq_points = 3
+                liq_reason = (
+                    "SSL STRONG Sweep "
+                    "(Equal Lows) (+3) 🔥")
+            elif quality == "NORMAL":
+                liq_points = 2
+                liq_reason = (
+                    "SSL NORMAL Sweep (+2) ✅")
+            else:
+                liq_points = 1
+                liq_reason = (
+                    "SSL WEAK Sweep (+1) ⚠️")
+        else:
+            if liq.get("near_ssl", False):
+                liq_reason = (
+                    "Near SSL — No sweep (0)")
+            else:
+                liq_reason = (
+                    "No SSL Sweep (0) ❌")
+
+    else:
+        if liq["bsl_swept"]:
+            quality = liq.get(
+                "bsl_sweep_quality", "NORMAL")
+            if quality == "STRONG":
+                liq_points = 3
+                liq_reason = (
+                    "BSL STRONG Sweep "
+                    "(Equal Highs) (+3) 🔥")
+            elif quality == "NORMAL":
+                liq_points = 2
+                liq_reason = (
+                    "BSL NORMAL Sweep (+2) ✅")
+            else:
+                liq_points = 1
+                liq_reason = (
+                    "BSL WEAK Sweep (+1) ⚠️")
+        else:
+            if liq.get("near_bsl", False):
+                liq_reason = (
+                    "Near BSL — No sweep (0)")
+            else:
+                liq_reason = (
+                    "No BSL Sweep (0) ❌")
+
+    points += liq_points
+    reasons.append(f"1m LIQ: {liq_reason}")
+
+    # ════════════════════════════════════════
+    #  1m — FVG — 3 Points
+    # ════════════════════════════════════════
+
+    fvg_points = 0
+    fvg_reason = ""
+
+    if direction == "BUY":
+        bull_fvgs = [
+            f for f in fvgs
+            if f["type"] == "BULL"
+            and f["retest"]]
+
+        if bull_fvgs:
+            best_fvg = sorted(
+                bull_fvgs,
+                key=lambda x: x["score"],
+                reverse=True)[0]
+
+            if best_fvg["score"] >= 2.5:
+                fvg_points = 3
+                fvg_reason = (
+                    f"BULL FVG STRONG "
+                    f"{best_fvg['bottom']:.4f}-"
+                    f"{best_fvg['top']:.4f} "
+                    f"[{best_fvg['size']}%] (+3) 🔥")
+            elif best_fvg["score"] >= 1.5:
+                fvg_points = 2
+                fvg_reason = (
+                    f"BULL FVG GOOD "
+                    f"{best_fvg['bottom']:.4f}-"
+                    f"{best_fvg['top']:.4f} (+2) ✅")
+            else:
+                fvg_points = 1
+                fvg_reason = (
+                    f"BULL FVG WEAK "
+                    f"{best_fvg['bottom']:.4f}-"
+                    f"{best_fvg['top']:.4f} (+1) ⚠️")
+        else:
+            near_bull = [
+                f for f in fvgs
+                if f["type"] == "BULL"
+                and f["fresh"]]
+            if near_bull:
+                fvg_reason = (
+                    "Bull FVG Nearby "
+                    "no retest (0)")
+            else:
+                fvg_reason = (
+                    "No Bull FVG (0) ❌")
+
+    else:
+        bear_fvgs = [
+            f for f in fvgs
+            if f["type"] == "BEAR"
+            and f["retest"]]
+
+        if bear_fvgs:
+            best_fvg = sorted(
+                bear_fvgs,
+                key=lambda x: x["score"],
+                reverse=True)[0]
+
+            if best_fvg["score"] >= 2.5:
+                fvg_points = 3
+                fvg_reason = (
+                    f"BEAR FVG STRONG "
+                    f"{best_fvg['bottom']:.4f}-"
+                    f"{best_fvg['top']:.4f} "
+                    f"[{best_fvg['size']}%] (+3) 🔥")
+            elif best_fvg["score"] >= 1.5:
+                fvg_points = 2
+                fvg_reason = (
+                    f"BEAR FVG GOOD "
+                    f"{best_fvg['bottom']:.4f}-"
+                    f"{best_fvg['top']:.4f} (+2) ✅")
+            else:
+                fvg_points = 1
+                fvg_reason = (
+                    f"BEAR FVG WEAK "
+                    f"{best_fvg['bottom']:.4f}-"
+                    f"{best_fvg['top']:.4f} (+1) ⚠️")
+        else:
+            near_bear = [
+                f for f in fvgs
+                if f["type"] == "BEAR"
+                and f["fresh"]]
+            if near_bear:
+                fvg_reason = (
+                    "Bear FVG Nearby "
+                    "no retest (0)")
+            else:
+                fvg_reason = (
+                    "No Bear FVG (0) ❌")
+
+    points += fvg_points
+    reasons.append(f"1m FVG: {fvg_reason}")
+
+    # ════════════════════════════════════════
+    #  1m — BOS / CHOCH — 2 Points
+    # ════════════════════════════════════════
+
     if bos_choch:
-        bos_type = bos_choch.get(
-            "type", "NONE")
+        bos_type = bos_choch.get("type", "NONE")
         if (direction == "BUY" and
                 bos_type in [
                     "BOS_BULL",
@@ -1574,21 +1728,33 @@ def smart_money_score(
     else:
         reasons.append("1m BOS/CHOCH N/A (0)")
 
-    # Check 6+7: Order Block 1m (2 pts)
+    # ════════════════════════════════════════
+    #  1m — STRUCTURE — 1 Point
+    # ════════════════════════════════════════
+
+    if ((direction == "BUY" and
+         structure_1m == "BULL") or
+            (direction == "SELL" and
+             structure_1m == "BEAR")):
+        points += 1
+        reasons.append(
+            f"1m Structure {structure_1m} (+1) ✅")
+    else:
+        reasons.append(
+            f"1m Structure {structure_1m} (0)")
+
+    # ════════════════════════════════════════
+    #  1m — ORDER BLOCK — 1 Point
+    # ════════════════════════════════════════
+
     if direction == "BUY":
         ob_hit = [
             ob for ob in obs["bullish_obs"]
             if ob["price_in_ob"]]
         if ob_hit:
-            best_ob = sorted(
-                ob_hit,
-                key=lambda x: x["fresh"],
-                reverse=True)[0]
-            points += 2
+            points += 1
             reasons.append(
-                f"1m Bull OB "
-                f"{best_ob['bottom']:.4f}-"
-                f"{best_ob['top']:.4f} (+2) ✅")
+                "1m Bull OB (+1) ✅")
         else:
             reasons.append("1m No Bull OB (0)")
     else:
@@ -1596,104 +1762,30 @@ def smart_money_score(
             ob for ob in obs["bearish_obs"]
             if ob["price_in_ob"]]
         if ob_hit:
-            best_ob = sorted(
-                ob_hit,
-                key=lambda x: x["fresh"],
-                reverse=True)[0]
-            points += 2
+            points += 1
             reasons.append(
-                f"1m Bear OB "
-                f"{best_ob['bottom']:.4f}-"
-                f"{best_ob['top']:.4f} (+2) ✅")
+                "1m Bear OB (+1) ✅")
         else:
             reasons.append("1m No Bear OB (0)")
 
-    # Check 8: Liquidity 1m (1 pt)
-    if (direction == "BUY" and
-            liq["sell_swept"]):
-        points += 1
-        reasons.append(
-            "1m Sell Liq Swept (+1) ✅")
-    elif (direction == "SELL" and
-          liq["buy_swept"]):
-        points += 1
-        reasons.append(
-            "1m Buy Liq Swept (+1) ✅")
-    else:
-        reasons.append("1m No Liq Sweep (0)")
+    # ════════════════════════════════════════
+    #  VOLUME INFO
+    # ════════════════════════════════════════
 
-    # Check 9: Equal Levels 1m (1 pt)
-    if eq_levels:
-        if (direction == "BUY" and
-                eq_levels["near_eq_low"]):
-            points += 1
-            reasons.append(
-                "1m Near Eq Lows (+1) ✅")
-        elif (direction == "SELL" and
-              eq_levels["near_eq_high"]):
-            points += 1
-            reasons.append(
-                "1m Near Eq Highs (+1) ✅")
-        else:
-            reasons.append(
-                "1m No Eq Level (0)")
-    else:
-        reasons.append("1m Eq Level N/A (0)")
-
-    # Check 10: FVG 1m (1 pt)
-    if direction == "BUY":
-        bull_fvg = [
-            f for f in fvgs
-            if f["type"] == "BULL"
-            and f["retest"]]
-        if bull_fvg:
-            points += 1
-            reasons.append(
-                f"1m Bull FVG "
-                f"{bull_fvg[-1]['bottom']:.4f}-"
-                f"{bull_fvg[-1]['top']:.4f} (+1) ✅")
-        else:
-            reasons.append("1m No Bull FVG (0)")
-    else:
-        bear_fvg = [
-            f for f in fvgs
-            if f["type"] == "BEAR"
-            and f["retest"]]
-        if bear_fvg:
-            points += 1
-            reasons.append(
-                f"1m Bear FVG "
-                f"{bear_fvg[-1]['bottom']:.4f}-"
-                f"{bear_fvg[-1]['top']:.4f} (+1) ✅")
-        else:
-            reasons.append("1m No Bear FVG (0)")
-
-    # Check 11: RSI 1m (1 pt)
-    rsi_ok, rsi_msg = check_rsi(
-        rsi_val, direction)
-    if rsi_ok:
-        points += 1
-        reasons.append(f"1m {rsi_msg} (+1) ✅")
-    else:
-        reasons.append(f"1m {rsi_msg} (0)")
-
-    # Check 12: Moving Average 1m (1 pt)
-    if ma_ok:
-        points += 1
-        reasons.append("1m MA Confirms (+1) ✅")
-    else:
-        reasons.append("1m MA Against (0) ❌")
-
-    # Volume Info
     if volume_ok:
-        reasons.append("Volume Strong ✅")
+        reasons.append("Volume: Strong ✅")
     else:
-        reasons.append("Volume Weak ⚠️")
+        reasons.append("Volume: Weak ⚠️")
 
-    # Final Score
+    # ════════════════════════════════════════
+    #  FINAL SUMMARY
+    # ════════════════════════════════════════
+
     reasons.append("━━━━━━━━━━━━━━━━━━━━━━")
-    reasons.append(f"Total Score: {points}/12")
-    reasons.append(f"Direction  : {direction}")
+    reasons.append(f"Total Score : {points}/12")
+    reasons.append(f"Direction   : {direction}")
+    reasons.append(f"LIQ Points  : {liq_points}/3")
+    reasons.append(f"FVG Points  : {fvg_points}/3")
     reasons.append(
         f"5m={structure_5m} | "
         f"1m={structure_1m}")
@@ -1706,9 +1798,6 @@ def smart_money_score(
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def calc_pnl(side, entry, exit_price, pos_size):
-    """
-    PnL calculate karta hai
-    """
     if side == "BUY":
         return (exit_price - entry) * pos_size
     else:
@@ -1720,9 +1809,6 @@ def calc_pnl(side, entry, exit_price, pos_size):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def get_dynamic_rr(score):
-    """
-    Score ke hisaab se RR deta hai
-    """
     score = int(score)
     if score >= 12:
         sl_mult = RR_CONFIG[12]["sl_mult"]
@@ -1763,9 +1849,6 @@ def get_dynamic_rr(score):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_periodic_update():
-    """
-    Har 30 min mein sab symbols ka update
-    """
     time.sleep(UPDATE_INTERVAL)
     while True:
         try:
@@ -1889,9 +1972,6 @@ def run_periodic_update():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_daily_report():
-    """
-    Raat 11:59 IST mein daily report
-    """
     while True:
         try:
             ist = timezone(
@@ -1952,7 +2032,8 @@ def run_daily_report():
                                 f"Overall : "
                                 f"{overall['total']}T "
                                 f"WR={overall['win_rate']}% "
-                                f"PnL={overall['pnl']:+.4f}\n")
+                                f"PnL="
+                                f"{overall['pnl']:+.4f}\n")
                     else:
                         msg += (
                             f"\n📊 {sym_name}: "
@@ -1995,21 +2076,15 @@ def run_daily_report():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  DECISION ENGINE — Per Symbol (5m + 1m)
+#  DECISION ENGINE — Per Symbol
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_decision_engine_for_symbol(symbol):
-    """
-    Har symbol ke liye alag decision engine
-    5m  = Main Trend
-    1m  = Entry + All Indicators
-    Har 60 seconds mein scan karta hai
-    """
     exchange = get_exchange()
     sym_name = symbol.split("/")[0]
     print(
         f"[{sym_name}][DECISION] "
-        f"v4.0 5m+1m Started ✅")
+        f"v5.0 Started ✅")
 
     while True:
         try:
@@ -2022,7 +2097,7 @@ def run_decision_engine_for_symbol(symbol):
                 symbol,
                 last_session=session_name)
 
-            # ── Data Fetch — 2 Timeframes ─────────
+            # ── Data Fetch ────────────────────────
             bars_5m = safe_fetch_ohlcv(
                 exchange, symbol, "5m", 100)
             time.sleep(0.5)
@@ -2050,7 +2125,6 @@ def run_decision_engine_for_symbol(symbol):
                     "time", "open", "high",
                     "low", "close", "volume"])
 
-            # ── Data Check ────────────────────────
             if (len(df_5m) < 50 or
                     len(df_1m) < 50):
                 print(
@@ -2077,11 +2151,11 @@ def run_decision_engine_for_symbol(symbol):
                 f"1m={atr_1m:.4f} | "
                 f"5m={atr_5m:.4f}")
 
-            # ── Volume — 1m ───────────────────────
+            # ── Volume ────────────────────────────
             volume_ok = check_volume(
                 df_1m, symbol, VOLUME_MULT)
 
-            # ── Structure — 5m + 1m ───────────────
+            # ── Structure ─────────────────────────
             structure_5m = detect_structure(df_5m)
             structure_1m = detect_structure(df_1m)
 
@@ -2090,45 +2164,21 @@ def run_decision_engine_for_symbol(symbol):
                 f"5m={structure_5m} | "
                 f"1m={structure_1m}")
 
-            # ── BOS/CHOCH — 1m ────────────────────
+            # ── BOS/CHOCH ─────────────────────────
             bos_choch = detect_bos_choch(df_1m)
 
             print(
                 f"[{sym_name}][BOS-1m] "
                 f"{bos_choch['type']}")
 
-            # ── Order Block — 1m ──────────────────
+            # ── Order Block ───────────────────────
             obs = detect_order_blocks(df_1m)
 
-            # ── FVG — 1m ──────────────────────────
+            # ── FVG ───────────────────────────────
             fvgs = detect_fvg(df_1m)
 
-            # ── Liquidity — 1m ────────────────────
+            # ── Liquidity ─────────────────────────
             liq = detect_liquidity(df_1m)
-
-            # ── RSI — 1m ──────────────────────────
-            rsi_val = calc_rsi(df_1m, 14)
-
-            # ── Equal Levels — 1m ─────────────────
-            eq_levels = detect_equal_levels(df_1m)
-
-            # ── MA — 1m ───────────────────────────
-            temp_dir = (
-                "BUY"
-                if structure_5m == "BULL"
-                else "SELL"
-                if structure_5m == "BEAR"
-                else "BUY")
-
-            ma_ok, ma_status, ema20, ema50 = (
-                check_moving_average(
-                    df_1m, temp_dir))
-
-            print(
-                f"[{sym_name}][MA-1m] "
-                f"Status={ma_status} | "
-                f"EMA20={ema20:.4f} | "
-                f"EMA50={ema50:.4f}")
 
             # ── Smart Money Score ─────────────────
             points, direction, reasons = (
@@ -2139,9 +2189,6 @@ def run_decision_engine_for_symbol(symbol):
                     obs,
                     fvgs,
                     bos_choch=bos_choch,
-                    rsi_val=rsi_val,
-                    ma_ok=ma_ok,
-                    eq_levels=eq_levels,
                     volume_ok=volume_ok,
                 ))
 
@@ -2202,7 +2249,6 @@ def run_decision_engine_for_symbol(symbol):
                 f"1m={structure_1m} | "
                 f"BOS={bos_choch['type']} | "
                 f"ATR5m={atr_5m:.4f} | "
-                f"RSI={rsi_val:.1f} | "
                 f"Price={current_price:.4f} | "
                 f"{session_name}")
 
@@ -2213,8 +2259,6 @@ def run_decision_engine_for_symbol(symbol):
                 "score":        points,
                 "atr_1m":       round(atr_1m, 6),
                 "atr_5m":       round(atr_5m, 6),
-                "rsi":          round(rsi_val, 2),
-                "ma_status":    ma_status,
                 "time":         scan_time,
                 "reasons":      reasons,
                 "volume_ok":    volume_ok,
@@ -2247,14 +2291,12 @@ def run_decision_engine_for_symbol(symbol):
                 "points":       points,
                 "atr_1m":       round(atr_1m, 6),
                 "atr_5m":       round(atr_5m, 6),
-                "rsi":          round(rsi_val, 2),
                 "price":        current_price,
                 "session":      session_name,
                 "volume_ok":    volume_ok,
                 "structure_5m": structure_5m,
                 "structure_1m": structure_1m,
                 "bos_1m":       bos_choch["type"],
-                "ma_status":    ma_status,
             })
             log = log[-3000:]
 
@@ -2280,12 +2322,6 @@ def run_decision_engine_for_symbol(symbol):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_execution_engine_for_symbol(symbol):
-    """
-    Har symbol ke liye alag execution engine
-    Capital = CAPITAL_PER_SYM (Total / 4)
-    Leverage = 10x
-    Trade Use = 90% of per symbol capital
-    """
     ex                 = get_exchange()
     capital            = load_capital(symbol)
     sym_name           = symbol.split("/")[0]
@@ -2320,11 +2356,11 @@ def run_execution_engine_for_symbol(symbol):
 
     print(
         f"[{sym_name}][EXECUTE] "
-        f"v4.0 5m+1m Started! ✅")
+        f"v5.0 Started! ✅")
 
     send_telegram(
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"  BOT v4.0 STARTED\n"
+        f"  BOT v5.0 STARTED\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
         f"Symbol   : {sym_name}\n"
         f"Capital  : {capital:.4f} USDT\n"
@@ -2332,6 +2368,7 @@ def run_execution_engine_for_symbol(symbol):
         f"{capital * CAPITAL_USE_PCT / 100:.4f} USDT\n"
         f"Leverage : {LEVERAGE}x\n"
         f"Min Score: {MIN_SCORE}/12\n"
+        f"Strategy : FVG + LIQ + BOS + OB\n"
         f"Max Hold : "
         f"{MAX_HOLD_SECONDS // 60} min\n"
         f"Ext      : {MAX_HOLD_EXTENSION}s "
@@ -3043,7 +3080,6 @@ def run_execution_engine_for_symbol(symbol):
                 if (signal in ["BUY", "SELL"] and
                         int(score) >= MIN_SCORE):
 
-                    # Spread Check
                     spread_ok = check_spread(
                         ex, symbol)
                     if not spread_ok:
@@ -3053,7 +3089,6 @@ def run_execution_engine_for_symbol(symbol):
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                    # Volume Check
                     if (not vol_ok and
                             int(score) < 10):
                         print(
@@ -3062,7 +3097,6 @@ def run_execution_engine_for_symbol(symbol):
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                    # Session Check
                     good_sess, sess_name = (
                         is_good_session())
                     if (not good_sess and
@@ -3074,11 +3108,9 @@ def run_execution_engine_for_symbol(symbol):
                         time.sleep(EXECUTE_SCAN)
                         continue
 
-                    # Dynamic RR
                     sl_mult, tp_mult, rr_type = (
                         get_dynamic_rr(score))
 
-                    # SL/TP — ATR 5m use karo
                     if atr_5m > 0:
                         sl_pct = (
                             atr_5m * sl_mult /
@@ -3090,12 +3122,10 @@ def run_execution_engine_for_symbol(symbol):
                         sl_pct = 0.3 * sl_mult
                         tp_pct = 0.3 * tp_mult
 
-                    # Capital — 90% of per symbol
                     capital_used = (
                         capital *
                         (CAPITAL_USE_PCT / 100))
 
-                    # Position Size — 10x Leverage
                     pos_size = (
                         (capital_used * LEVERAGE) /
                         current_price)
@@ -3117,7 +3147,6 @@ def run_execution_engine_for_symbol(symbol):
                         tp_price = entry_price * (
                             1 - tp_pct / 100)
 
-                    # RR Check
                     rr_ok, rr_val = check_rr(
                         entry_price,
                         sl_price,
@@ -3259,15 +3288,16 @@ if __name__ == "__main__":
         MAX_EXTENSIONS)
 
     print("=" * 60)
-    print("  SCALPING BOT v4.0")
+    print("  SCALPING BOT v5.0")
     print("  Multi-Symbol SMC Edition")
+    print("  FVG + LIQ + BOS + OB")
     print("=" * 60)
     print(
         f"  Symbols   : "
         f"{', '.join([s.split('/')[0] for s in SYMBOLS])}")
     print(
         f"  Strategy  : "
-        f"BOS+CHOCH+OB+LIQ+FVG+RSI+MA")
+        f"FVG + LIQ + BOS + CHOCH + OB")
     print(f"  Timeframes: 5m+1m")
     print(f"  Min Score : {MIN_SCORE}/12")
     print(f"  Total Cap : {TOTAL_CAPITAL} USDT")
@@ -3281,6 +3311,9 @@ if __name__ == "__main__":
     print(
         f"  Exposure  : "
         f"{CAPITAL_PER_SYM * CAPITAL_USE_PCT / 100 * LEVERAGE:.4f} USDT")
+    print(
+        f"  Score     : "
+        f"LIQ=3 | FVG=3 | BOS=2 | STR=1 | OB=1")
     print(
         f"  Dynamic RR: "
         f"8=1:2 | 10=1:3 | 12=1:4")
@@ -3301,28 +3334,24 @@ if __name__ == "__main__":
 
     threads = []
 
-    # Flask Server
     t_flask = threading.Thread(
         target=run_server,
         name="Flask_Server",
         daemon=True)
     threads.append(t_flask)
 
-    # Periodic Update
     t_update = threading.Thread(
         target=run_periodic_update,
         name="Periodic_Update",
         daemon=True)
     threads.append(t_update)
 
-    # Daily Report
     t_daily = threading.Thread(
         target=run_daily_report,
         name="Daily_Report",
         daemon=True)
     threads.append(t_daily)
 
-    # Decision + Execution — Per Symbol
     for sym in SYMBOLS:
         sym_name = sym.split("/")[0]
 
@@ -3341,7 +3370,6 @@ if __name__ == "__main__":
         threads.append(t_decision)
         threads.append(t_execution)
 
-    # Start All Threads
     for t in threads:
         t.start()
         time.sleep(0.5)
