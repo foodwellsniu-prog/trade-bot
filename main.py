@@ -1,17 +1,18 @@
 """
-ETH Momentum Scalping Bot v2.0
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Strategy : 30s Momentum
-           Market direction dekho
-           Us taraf entry lo
-           Profit pe exit
+ETH High Frequency Scalping Bot v3.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Strategy : Order Book + Trade Flow 
+           + Price Velocity
+           Next few seconds predict karo
+           Us side entry lo
+           Seconds mein exit karo
 Symbol   : ETH/USDT
-Capital  : 1000 USDT
+Capital  : 1052 USDT
 Leverage : 5x
-Target   : 0.15% per trade
-SL       : 0.10% per trade
-Max Hold : 60 seconds
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TP       : 0.05%
+SL       : 0.03%
+Max Hold : 10 seconds
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import ccxt
@@ -22,16 +23,14 @@ import threading
 import time
 import json
 import os
-import queue
 from flask import Flask
-from queue import Queue
 from datetime import datetime, timezone, timedelta
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "ETH Momentum Bot v2.0 Running!"
+    return "ETH HF Scalping Bot v3.0 Running!"
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
@@ -49,27 +48,29 @@ BOT_TOKEN  = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
 CHAT_ID    = "7102976298"
 
 # ── Capital ───────────────────────────────
-CAPITAL     = 1000.0
-CAPITAL_USE = 90       # 90% = 900 USDT
+CAPITAL     = 1052.0
+CAPITAL_USE = 90
 LEVERAGE    = 5
 
 # ── Trade Config ──────────────────────────
-TP_PCT      = 0.15     # 0.15% target
-SL_PCT      = 0.10     # 0.10% stop loss
-MAX_HOLD    = 60       # 60 seconds max
+TP_PCT   = 0.05    # 0.05% target
+SL_PCT   = 0.03    # 0.03% stop loss
+MAX_HOLD = 10      # 10 seconds max
 
-# ── Momentum Config ───────────────────────
-MOMENTUM_CANDLES = 6   # 6 candles of 5s = 30s
-MOMENTUM_TF      = "1m"
-SCAN_INTERVAL    = 5   # Har 5 second scan
+# ── Speed ─────────────────────────────────
+SCAN_INTERVAL = 1  # Har 1 second scan
 
 # ── Cooldown ──────────────────────────────
-COOLDOWN_WIN   = 10    # Win ke baad 10s
-COOLDOWN_LOSS  = 20    # Loss ke baad 20s
-COOLDOWN_2LOSS = 40    # 2 loss ke baad 40s
+COOLDOWN_WIN   = 2   # Win ke baad 2s
+COOLDOWN_LOSS  = 5   # Loss ke baad 5s
+COOLDOWN_2LOSS = 10  # 2 loss ke baad 10s
 
 # ── Spread ────────────────────────────────
 MAX_SPREAD = 0.05
+
+# ── Order Book Config ─────────────────────
+OB_LEVELS      = 10   # Top 10 levels
+OB_IMBALANCE   = 1.5  # 1.5x imbalance
 
 # ── Update ────────────────────────────────
 UPDATE_INTERVAL = 1800
@@ -103,8 +104,10 @@ state = {
     "capital_used": 0.0,
     "capital":      CAPITAL,
     "last_price":   0.0,
-    "momentum":     "FLAT",
     "last_signal":  "WAIT",
+    "ob_signal":    "FLAT",
+    "flow_signal":  "FLAT",
+    "velocity":     0.0,
 }
 
 def update_state(**kwargs):
@@ -192,7 +195,9 @@ def save_trade(side, entry, exit_p,
             "pnl":      round(pnl, 4),
             "capital":  round(capital, 4),
             "duration": duration,
-            "result":   "WIN" if pnl > 0 else "LOSS",
+            "result":   (
+                "WIN" if pnl > 0
+                else "LOSS"),
             "label":    label,
         })
 
@@ -214,7 +219,8 @@ def get_daily_stats():
     except Exception:
         return None
 
-    today  = datetime.now().strftime("%d/%m/%Y")
+    today  = datetime.now().strftime(
+        "%d/%m/%Y")
     trades = [
         t for t in history
         if t["date"] == today]
@@ -257,7 +263,7 @@ def get_exchange():
                 "apiKey":          API_KEY,
                 "secret":          API_SECRET,
                 "enableRateLimit": True,
-                "rateLimit":       100,
+                "rateLimit":       50,
             })
             ex.load_markets()
             print("[INFO] Binance connected ✅")
@@ -265,6 +271,19 @@ def get_exchange():
         except Exception as e:
             print(f"[RECONNECT] {e} — 30s...")
             time.sleep(30)
+
+
+def safe_fetch_ticker(ex):
+    for i in range(3):
+        try:
+            t = ex.fetch_ticker(SYMBOL)
+            return float(t["last"])
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 10)
+            else:
+                time.sleep(2)
+    return None
 
 
 def safe_fetch_ohlcv(ex, tf, limit):
@@ -277,36 +296,37 @@ def safe_fetch_ohlcv(ex, tf, limit):
             return bars
         except Exception as e:
             if "429" in str(e):
-                time.sleep((i+1) * 30)
+                time.sleep((i+1) * 10)
             else:
-                time.sleep(3)
+                time.sleep(2)
     return None
 
 
-def safe_fetch_ticker(ex):
-    for i in range(3):
-        try:
-            t = ex.fetch_ticker(SYMBOL)
-            return float(t["last"])
-        except Exception as e:
-            if "429" in str(e):
-                time.sleep((i+1) * 30)
-            else:
-                time.sleep(3)
-    return None
-
-
-def safe_fetch_orderbook(ex):
+def safe_fetch_orderbook(ex, limit=10):
     for i in range(3):
         try:
             ob = ex.fetch_order_book(
-                SYMBOL, limit=5)
+                SYMBOL, limit=limit)
             return ob
         except Exception as e:
             if "429" in str(e):
-                time.sleep((i+1) * 30)
+                time.sleep((i+1) * 10)
             else:
-                time.sleep(3)
+                time.sleep(2)
+    return None
+
+
+def safe_fetch_trades(ex, limit=50):
+    for i in range(3):
+        try:
+            trades = ex.fetch_trades(
+                SYMBOL, limit=limit)
+            return trades
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 10)
+            else:
+                time.sleep(2)
     return None
 
 
@@ -338,28 +358,6 @@ def send_telegram(message):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  SPREAD CHECK
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def check_spread(ex):
-    try:
-        ob  = safe_fetch_orderbook(ex)
-        if ob is None:
-            return True
-        bid = ob["bids"][0][0]
-        ask = ob["asks"][0][0]
-        pct = ((ask - bid) / bid) * 100
-        ok  = pct <= MAX_SPREAD
-        print(
-            f"[SPREAD] {pct:.4f}% "
-            f"{'OK ✅' if ok else 'HIGH ❌'}")
-        return ok
-    except Exception as e:
-        print(f"[SPREAD ERROR] {e}")
-        return True
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PnL CALCULATOR
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -371,109 +369,237 @@ def calc_pnl(side, entry, exit_p, pos_size):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MOMENTUM DETECTOR
-#  30 Second direction detect karta hai
+#  ORDER BOOK ANALYSIS
+#  Buy/Sell pressure dekho
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def detect_momentum(ex):
+def analyze_orderbook(ex):
     """
-    Last 30 seconds ka momentum check karta hai
+    Order Book se next move predict karo
 
-    1m candles fetch karta hai
-    Last candle ka direction dekha jata hai
-    Volume confirm karta hai
+    Bids = Buy orders (neeche)
+    Asks = Sell orders (upar)
+
+    Bid > Ask = Price upar jayegi = BUY
+    Ask > Bid = Price neeche jayegi = SELL
     """
     try:
-        # 1m candles — last 10 fetch karo
-        bars = safe_fetch_ohlcv(ex, "1m", 10)
-        if bars is None or len(bars) < 3:
-            return "FLAT", 0.0, 0.0
+        ob = safe_fetch_orderbook(
+            ex, limit=OB_LEVELS)
+        if ob is None:
+            return "FLAT", 0.0, 0.0, 0.0
 
-        df = pd.DataFrame(
-            bars,
-            columns=[
-                "time", "open", "high",
-                "low", "close", "volume"])
+        bids = ob["bids"]  # Buy orders
+        asks = ob["asks"]  # Sell orders
 
-        # Current incomplete candle
-        last   = df.iloc[-1]
-        prev   = df.iloc[-2]
-        prev2  = df.iloc[-3]
+        if not bids or not asks:
+            return "FLAT", 0.0, 0.0, 0.0
 
-        cur_open  = float(last["open"])
-        cur_close = float(last["close"])
-        cur_high  = float(last["high"])
-        cur_low   = float(last["low"])
-        cur_vol   = float(last["volume"])
+        # Best price
+        best_bid = float(bids[0][0])
+        best_ask = float(asks[0][0])
 
-        prev_close = float(prev["close"])
-        prev_open  = float(prev["open"])
-        prev_vol   = float(prev["volume"])
+        # Spread check
+        spread = (
+            (best_ask - best_bid) /
+            best_bid) * 100
 
-        avg_vol = float(
-            df["volume"].tail(5).mean())
+        if spread > MAX_SPREAD:
+            print(
+                f"[OB] Spread HIGH "
+                f"{spread:.4f}% ❌")
+            return "FLAT", 0.0, spread, 0.0
 
-        # ── Momentum Calculate ────────────
-        # Current candle ka move
-        cur_move = (
-            (cur_close - cur_open) /
-            cur_open) * 100
+        # Total buy/sell volume
+        # Top 10 levels
+        bid_vol = sum(
+            float(b[1]) for b in bids[:10])
+        ask_vol = sum(
+            float(a[1]) for a in asks[:10])
 
-        # Previous candle ka move
-        prev_move = (
-            (prev_close - prev_open) /
-            prev_open) * 100
+        if ask_vol == 0:
+            return "FLAT", 0.0, spread, 0.0
 
-        # Volume strong hai?
-        vol_strong = cur_vol > avg_vol * 0.8
+        # Imbalance ratio
+        ratio = bid_vol / ask_vol
 
-        # Price direction
-        price_up   = cur_close > cur_open
-        price_down = cur_close < cur_open
-
-        # Consecutive movement
-        both_up   = (
-            price_up and
-            prev_close > prev_open)
-        both_down = (
-            price_down and
-            prev_close < prev_open)
-
-        # Body size (candle strength)
-        body_size = abs(cur_close - cur_open)
-        total_size = cur_high - cur_low
-        body_ratio = (
-            body_size / total_size
-            if total_size > 0 else 0)
-
-        # ── Signal Decision ───────────────
-        if (both_up and
-                vol_strong and
-                body_ratio > 0.3):
-            momentum = "UP"
-        elif (both_down and
-              vol_strong and
-              body_ratio > 0.3):
-            momentum = "DOWN"
-        elif price_up and vol_strong:
-            momentum = "UP"
-        elif price_down and vol_strong:
-            momentum = "DOWN"
+        # Signal decide karo
+        if ratio >= OB_IMBALANCE:
+            # Zyada buy orders = price upar
+            signal = "BUY"
+        elif ratio <= (1 / OB_IMBALANCE):
+            # Zyada sell orders = price neeche
+            signal = "SELL"
         else:
-            momentum = "FLAT"
+            signal = "FLAT"
+
+        mid_price = (best_bid + best_ask) / 2
 
         print(
-            f"[MOMENTUM] {momentum} | "
-            f"Move={cur_move:.3f}% | "
-            f"Vol={cur_vol/avg_vol:.1f}x | "
-            f"Body={body_ratio:.2f} | "
-            f"Price={cur_close:.4f}")
+            f"[OB] {signal} | "
+            f"BidVol={bid_vol:.2f} | "
+            f"AskVol={ask_vol:.2f} | "
+            f"Ratio={ratio:.2f} | "
+            f"Spread={spread:.4f}%")
 
-        return momentum, cur_close, cur_move
+        return signal, mid_price, spread, ratio
 
     except Exception as e:
-        print(f"[MOMENTUM ERROR] {e}")
+        print(f"[OB ERROR] {e}")
+        return "FLAT", 0.0, 0.0, 0.0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  TRADE FLOW ANALYSIS
+#  Recent trades ka direction dekho
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def analyze_trade_flow(ex):
+    """
+    Recent trades se flow detect karo
+
+    Buy trades > Sell = BUY pressure
+    Sell trades > Buy = SELL pressure
+    """
+    try:
+        trades = safe_fetch_trades(
+            ex, limit=50)
+        if not trades:
+            return "FLAT", 0.0, 0.0
+
+        buy_vol  = 0.0
+        sell_vol = 0.0
+
+        for t in trades:
+            side = t.get("side", "")
+            amt  = float(
+                t.get("amount", 0))
+            if side == "buy":
+                buy_vol += amt
+            elif side == "sell":
+                sell_vol += amt
+
+        if sell_vol == 0:
+            return "FLAT", 0.0, 0.0
+
+        ratio = buy_vol / sell_vol
+
+        if ratio >= 1.3:
+            signal = "BUY"
+        elif ratio <= 0.7:
+            signal = "SELL"
+        else:
+            signal = "FLAT"
+
+        print(
+            f"[FLOW] {signal} | "
+            f"Buy={buy_vol:.2f} | "
+            f"Sell={sell_vol:.2f} | "
+            f"Ratio={ratio:.2f}")
+
+        return signal, buy_vol, sell_vol
+
+    except Exception as e:
+        print(f"[FLOW ERROR] {e}")
         return "FLAT", 0.0, 0.0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  PRICE VELOCITY
+#  Price kitni tezi se move kar rahi hai
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+price_history = []
+price_lock    = threading.Lock()
+
+def update_price_history(price):
+    with price_lock:
+        price_history.append({
+            "price": price,
+            "time":  time.time(),
+        })
+        # Sirf last 30 seconds rakho
+        cutoff = time.time() - 30
+        while (price_history and
+               price_history[0]["time"] < cutoff):
+            price_history.pop(0)
+
+def analyze_velocity():
+    """
+    Price velocity calculate karo
+
+    Kitni tezi se move ho rahi hai
+    Aur kis direction mein
+    """
+    try:
+        with price_lock:
+            if len(price_history) < 3:
+                return "FLAT", 0.0
+
+            recent = price_history[-10:]
+            if len(recent) < 2:
+                return "FLAT", 0.0
+
+            first = recent[0]["price"]
+            last  = recent[-1]["price"]
+            t1    = recent[0]["time"]
+            t2    = recent[-1]["time"]
+
+            if t2 == t1:
+                return "FLAT", 0.0
+
+            # Price change per second
+            change    = last - first
+            time_diff = t2 - t1
+            velocity  = change / time_diff
+
+            # Percentage change
+            pct = (change / first) * 100
+
+            if pct > 0.01:
+                signal = "BUY"
+            elif pct < -0.01:
+                signal = "SELL"
+            else:
+                signal = "FLAT"
+
+            print(
+                f"[VEL] {signal} | "
+                f"Change={pct:.4f}% | "
+                f"Vel={velocity:.4f}/s")
+
+            return signal, pct
+
+    except Exception as e:
+        print(f"[VEL ERROR] {e}")
+        return "FLAT", 0.0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  COMBINED SIGNAL
+#  Sab signals combine karo
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def get_combined_signal(
+        ob_signal,
+        flow_signal,
+        vel_signal):
+    """
+    3 signals combine karo
+
+    2/3 same direction = Entry
+    """
+    signals = [ob_signal, flow_signal, vel_signal]
+
+    buy_count  = signals.count("BUY")
+    sell_count = signals.count("SELL")
+
+    if buy_count >= 2:
+        return "BUY", buy_count
+    elif sell_count >= 2:
+        return "SELL", sell_count
+    else:
+        return "FLAT", 0
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -498,7 +624,8 @@ def run_periodic_update():
             tp       = st["tp_price"]
             psize    = st["pos_size"]
             etime    = st["entry_time"]
-            momentum = st["momentum"]
+            ob_sig   = st["ob_signal"]
+            fl_sig   = st["flow_signal"]
 
             daily = get_daily_stats()
 
@@ -506,7 +633,8 @@ def run_periodic_update():
                     etime is not None and
                     price > 0):
                 pnl_now = calc_pnl(
-                    pos, entry, price, psize)
+                    pos, entry,
+                    price, psize)
                 dur = str(
                     datetime.now() -
                     etime).split(".")[0]
@@ -524,7 +652,8 @@ def run_periodic_update():
                     f"Price  : {price:.4f}\n"
                     f"PnL    : "
                     f"{pnl_now:+.4f} USDT\n"
-                    f"Momentum: {momentum}\n"
+                    f"OB     : {ob_sig}\n"
+                    f"Flow   : {fl_sig}\n"
                     f"Capital: "
                     f"{capital:.4f} USDT\n")
             else:
@@ -534,9 +663,10 @@ def run_periodic_update():
                     f"  {now}\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"⏳ WAITING\n"
-                    f"Price   : {price:.4f}\n"
-                    f"Momentum: {momentum}\n"
-                    f"Capital : "
+                    f"Price  : {price:.4f}\n"
+                    f"OB     : {ob_sig}\n"
+                    f"Flow   : {fl_sig}\n"
+                    f"Capital: "
                     f"{capital:.4f} USDT\n")
 
             if daily:
@@ -544,7 +674,8 @@ def run_periodic_update():
                     f"━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"TODAY\n"
                     f"Trades : {daily['total']}\n"
-                    f"Wins   : {daily['wins']} ✅\n"
+                    f"Wins   : "
+                    f"{daily['wins']} ✅\n"
                     f"Losses : "
                     f"{daily['losses']} ❌\n"
                     f"WR     : "
@@ -575,7 +706,8 @@ def run_daily_report():
             if (now.hour == 23 and
                     now.minute == 59):
                 daily = get_daily_stats()
-                today = now.strftime("%d/%m/%Y")
+                today = now.strftime(
+                    "%d/%m/%Y")
 
                 if daily:
                     msg = (
@@ -620,17 +752,9 @@ def run_daily_report():
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  MAIN TRADING ENGINE
-#  Sab kuch yahan hota hai
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_trading_engine():
-    """
-    Main engine:
-    1. Har 5s momentum check
-    2. Signal mila = Entry
-    3. TP/SL/MaxHold = Exit
-    4. Repeat
-    """
     ex                 = get_exchange()
     capital            = load_capital()
     position           = None
@@ -647,17 +771,18 @@ def run_trading_engine():
 
     send_telegram(
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"  ETH MOMENTUM BOT v2.0\n"
+        f"  ETH HF BOT v3.0\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
         f"Symbol  : ETH/USDT\n"
         f"Capital : {capital:.4f} USDT\n"
         f"Use     : "
         f"{capital * CAPITAL_USE / 100:.4f} USDT\n"
         f"Leverage: {LEVERAGE}x\n"
-        f"Target  : {TP_PCT}%\n"
+        f"TP      : {TP_PCT}%\n"
         f"SL      : {SL_PCT}%\n"
         f"Max Hold: {MAX_HOLD}s\n"
-        f"Strategy: 30s Momentum\n"
+        f"Strategy: OB+Flow+Velocity\n"
+        f"Scan    : Har {SCAN_INTERVAL}s\n"
         f"━━━━━━━━━━━━━━━━━━━━━━"
     )
 
@@ -666,14 +791,33 @@ def run_trading_engine():
             now = datetime.now().strftime(
                 "%H:%M:%S")
 
-            # ── Momentum Check ────────────
-            momentum, cur_price, move = (
-                detect_momentum(ex))
-
-            if cur_price == 0.0:
+            # ── Price Fetch ───────────────
+            cur_price = safe_fetch_ticker(ex)
+            if cur_price is None:
                 time.sleep(SCAN_INTERVAL)
                 continue
 
+            # Price history update
+            update_price_history(cur_price)
+
+            # ── Analysis ──────────────────
+            ob_signal, mid_price, spread, ob_ratio = (
+                analyze_orderbook(ex))
+
+            flow_signal, buy_vol, sell_vol = (
+                analyze_trade_flow(ex))
+
+            vel_signal, velocity = (
+                analyze_velocity())
+
+            # ── Combined Signal ───────────
+            final_signal, strength = (
+                get_combined_signal(
+                    ob_signal,
+                    flow_signal,
+                    vel_signal))
+
+            # State update
             update_state(
                 last_price=cur_price,
                 capital=capital,
@@ -684,11 +828,10 @@ def run_trading_engine():
                 tp_price=tp_price,
                 pos_size=pos_size,
                 capital_used=capital_used,
-                momentum=momentum,
-                last_signal=(
-                    momentum
-                    if position is None
-                    else position),
+                ob_signal=ob_signal,
+                flow_signal=flow_signal,
+                velocity=velocity,
+                last_signal=final_signal,
             )
 
             # ══════════════════════════════
@@ -716,21 +859,21 @@ def run_trading_engine():
                     f"Price={cur_price:.4f} | "
                     f"Held={held}s")
 
-                # ── TP Hit ────────────────
+                # TP Check
                 hit_tp = (
                     (position == "BUY" and
                      cur_price >= tp_price) or
                     (position == "SELL" and
                      cur_price <= tp_price))
 
-                # ── SL Hit ────────────────
+                # SL Check
                 hit_sl = (
                     (position == "BUY" and
                      cur_price <= sl_price) or
                     (position == "SELL" and
                      cur_price >= sl_price))
 
-                # ── Max Hold ──────────────
+                # Max Hold Check
                 hit_max = held >= MAX_HOLD
 
                 if hit_tp or hit_sl or hit_max:
@@ -794,7 +937,8 @@ def run_trading_engine():
                         f"Capital: "
                         f"{capital:.4f} USDT\n"
                         f"Time   : {duration}\n"
-                        f"Move   : {move:.3f}%\n"
+                        f"OB     : {ob_signal}\n"
+                        f"Flow   : {flow_signal}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━"
                     )
 
@@ -809,7 +953,6 @@ def run_trading_engine():
                     cooldown_end = (
                         time.time() + cd)
                     save_cooldown(cooldown_end)
-
                     update_state(
                         position=None,
                         capital_used=0.0,
@@ -819,7 +962,7 @@ def run_trading_engine():
                     continue
 
             # ══════════════════════════════
-            #  COOLDOWN CHECK
+            #  COOLDOWN
             # ══════════════════════════════
             if (cooldown_end is not None and
                     time.time() < cooldown_end):
@@ -835,18 +978,16 @@ def run_trading_engine():
             #  ENTRY
             # ══════════════════════════════
             if position is None:
-                if momentum in ["UP", "DOWN"]:
+                if final_signal in [
+                        "BUY", "SELL"]:
 
                     # Spread check
-                    if not check_spread(ex):
+                    if spread > MAX_SPREAD:
+                        print(
+                            f"[SKIP] "
+                            f"Spread {spread:.4f}%")
                         time.sleep(SCAN_INTERVAL)
                         continue
-
-                    # Signal
-                    signal = (
-                        "BUY"
-                        if momentum == "UP"
-                        else "SELL")
 
                     # Capital
                     capital_used = (
@@ -859,13 +1000,13 @@ def run_trading_engine():
                         cur_price)
 
                     # Entry
-                    entry_price = cur_price
-                    entry_time  = datetime.now()
-                    position    = signal
+                    entry_price  = cur_price
+                    entry_time   = datetime.now()
+                    position     = final_signal
                     cooldown_end = None
 
                     # TP / SL
-                    if signal == "BUY":
+                    if final_signal == "BUY":
                         tp_price = entry_price * (
                             1 + TP_PCT / 100)
                         sl_price = entry_price * (
@@ -890,21 +1031,22 @@ def run_trading_engine():
                         f"[OPENED] {position} | "
                         f"Entry={entry_price:.4f} | "
                         f"TP={tp_price:.4f} | "
-                        f"SL={sl_price:.4f}")
+                        f"SL={sl_price:.4f} | "
+                        f"Strength={strength}/3")
 
                     send_telegram(
                         f"🚀 ENTRY\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Symbol : ETH\n"
-                        f"Side   : {position}\n"
-                        f"Entry  : "
+                        f"Symbol  : ETH\n"
+                        f"Side    : {position}\n"
+                        f"Entry   : "
                         f"{entry_price:.4f}\n"
-                        f"TP     : "
+                        f"TP      : "
                         f"{tp_price:.4f}\n"
-                        f"SL     : "
+                        f"SL      : "
                         f"{sl_price:.4f}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Capital: "
+                        f"Capital : "
                         f"{capital_used:.2f} USDT\n"
                         f"Leverage: {LEVERAGE}x\n"
                         f"Exposure: "
@@ -912,22 +1054,27 @@ def run_trading_engine():
                         f"Exp Win : +{exp_win} USDT\n"
                         f"Exp Loss: -{exp_loss} USDT\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Momentum: {momentum}\n"
-                        f"Move    : {move:.3f}%\n"
+                        f"OB      : {ob_signal}\n"
+                        f"Flow    : {flow_signal}\n"
+                        f"Velocity: {vel_signal}\n"
+                        f"Strength: {strength}/3\n"
+                        f"OB Ratio: {ob_ratio:.2f}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━"
                     )
 
                 else:
                     print(
                         f"[{now}] FLAT | "
-                        f"Momentum={momentum} | "
+                        f"OB={ob_signal} | "
+                        f"Flow={flow_signal} | "
+                        f"Vel={vel_signal} | "
                         f"Price={cur_price:.4f}")
 
         except Exception as e:
             err = str(e)
             print(f"[ENGINE ERROR] {err}")
             if "429" in err:
-                time.sleep(60)
+                time.sleep(30)
             elif ("connection" in err.lower() or
                   "timeout" in err.lower()):
                 ex = get_exchange()
@@ -944,28 +1091,28 @@ def run_trading_engine():
 
 if __name__ == "__main__":
 
+    cap_use  = CAPITAL * CAPITAL_USE / 100
+    exposure = cap_use * LEVERAGE
+    exp_win  = round(
+        exposure * TP_PCT / 100, 4)
+    exp_loss = round(
+        exposure * SL_PCT / 100, 4)
+
     print("=" * 50)
-    print("  ETH MOMENTUM BOT v2.0")
+    print("  ETH HF SCALPING BOT v3.0")
+    print("  Order Book + Flow + Velocity")
     print("=" * 50)
     print(f"  Symbol   : ETH/USDT")
     print(f"  Capital  : {CAPITAL} USDT")
-    print(
-        f"  Use      : "
-        f"{CAPITAL * CAPITAL_USE / 100} USDT")
+    print(f"  Use      : {cap_use} USDT")
     print(f"  Leverage : {LEVERAGE}x")
-    print(
-        f"  Exposure : "
-        f"{CAPITAL * CAPITAL_USE / 100 * LEVERAGE} USDT")
-    print(f"  Target   : {TP_PCT}%")
+    print(f"  Exposure : {exposure} USDT")
+    print(f"  TP       : {TP_PCT}%")
     print(f"  SL       : {SL_PCT}%")
     print(f"  Max Hold : {MAX_HOLD}s")
-    print(f"  Strategy : 30s Momentum")
-    print(
-        f"  Exp Win  : "
-        f"+{CAPITAL * CAPITAL_USE / 100 * LEVERAGE * TP_PCT / 100:.2f} USDT")
-    print(
-        f"  Exp Loss : "
-        f"-{CAPITAL * CAPITAL_USE / 100 * LEVERAGE * SL_PCT / 100:.2f} USDT")
+    print(f"  Scan     : Har {SCAN_INTERVAL}s")
+    print(f"  Exp Win  : +{exp_win} USDT")
+    print(f"  Exp Loss : -{exp_loss} USDT")
     print("=" * 50)
 
     threads = [
