@@ -4,11 +4,10 @@ ETH High Frequency Scalping Bot v3.0
 Exchange : MEXC (Zero Maker Fee)
 Strategy : Order Book + Trade Flow 
            + Price Velocity
-           + Trend Filter (NEW)
 Symbol   : ETH/USDT
-Capital  : 35 USDT
-Leverage : 20x
-TP       : 0.08%
+Capital  : 1052 USDT
+Leverage : 5x
+TP       : 0.05%
 SL       : 0.03%
 Max Hold : 30 seconds
 Fee      : 0.01% Taker (MEXC)
@@ -16,6 +15,8 @@ Fee      : 0.01% Taker (MEXC)
 """
 
 import ccxt
+import pandas as pd
+import numpy as np
 import requests
 import threading
 import time
@@ -46,17 +47,17 @@ BOT_TOKEN  = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
 CHAT_ID    = "7102976298"
 
 # ── Capital ───────────────────────────────
-CAPITAL     = 35.0
+CAPITAL     = 1052.0
 CAPITAL_USE = 90
-LEVERAGE    = 20
+LEVERAGE    = 5
 
 # ── Trade Config ──────────────────────────
-TP_PCT   = 0.08
-SL_PCT   = 0.03
-MAX_HOLD = 30
+TP_PCT   = 0.05    # 0.05% target
+SL_PCT   = 0.03    # 0.03% stop loss
+MAX_HOLD = 30      # 30 seconds ← Updated
 
 # ── MEXC Fee ──────────────────────────────
-TAKER_FEE = 0.01
+TAKER_FEE = 0.01   # 0.01% taker fee MEXC
 
 # ── Speed ─────────────────────────────────
 SCAN_INTERVAL = 1
@@ -73,31 +74,31 @@ MAX_SPREAD = 0.05
 OB_LEVELS    = 10
 OB_IMBALANCE = 1.5
 
-# ── Trend Filter Config (NEW) ─────────────
-TREND_CANDLES  = 20   # Last 20 candles
-TREND_TF       = "1m" # 1 minute candles
-EMA_FAST       = 9    # Fast EMA
-EMA_SLOW       = 21   # Slow EMA
-
 # ── Update ────────────────────────────────
 UPDATE_INTERVAL = 1800
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  FEE CALCULATOR
+#  FEE CALCULATOR (MEXC)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def calc_fees(exposure):
+    """
+    MEXC Taker Fee = 0.01%
+    Entry fee + Exit fee dono
+    """
     entry_fee = exposure * TAKER_FEE / 100
     exit_fee  = exposure * TAKER_FEE / 100
     return round(entry_fee + exit_fee, 6)
 
 def calc_net_tp(exposure):
+    """Net Profit after fees"""
     gross = exposure * TP_PCT / 100
     fees  = calc_fees(exposure)
     return round(gross - fees, 6)
 
 def calc_net_sl(exposure):
+    """Net Loss after fees"""
     gross = exposure * SL_PCT / 100
     fees  = calc_fees(exposure)
     return round(gross + fees, 6)
@@ -137,7 +138,6 @@ state = {
     "ob_signal":    "FLAT",
     "flow_signal":  "FLAT",
     "velocity":     0.0,
-    "trend":        "FLAT",
 }
 
 def update_state(**kwargs):
@@ -204,7 +204,7 @@ def load_cooldown():
 
 def save_trade(side, entry, exit_p,
                pnl, fees, capital,
-               duration, label, trend):
+               duration, label):
     try:
         try:
             with open(
@@ -228,7 +228,6 @@ def save_trade(side, entry, exit_p,
             "net_pnl":  round(pnl - fees, 4),
             "capital":  round(capital, 4),
             "duration": duration,
-            "trend":    trend,
             "result":   (
                 "WIN" if (pnl - fees) > 0
                 else "LOSS"),
@@ -330,7 +329,7 @@ def safe_fetch_ticker(ex):
     return None
 
 
-def safe_fetch_ohlcv(ex, tf="1m", limit=30):
+def safe_fetch_ohlcv(ex, tf, limit):
     for i in range(3):
         try:
             bars = ex.fetch_ohlcv(
@@ -401,85 +400,15 @@ def send_telegram(message):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  EMA CALCULATOR
+#  PnL CALCULATOR
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def calc_ema(prices, period):
-    """
-    EMA calculate karo
-    Exponential Moving Average
-    """
-    if len(prices) < period:
-        return None
-
-    k   = 2 / (period + 1)
-    ema = sum(prices[:period]) / period
-
-    for price in prices[period:]:
-        ema = price * k + ema * (1 - k)
-
-    return round(ema, 4)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  TREND FILTER (NEW)
-#  EMA 9 vs EMA 21 se trend detect karo
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def analyze_trend(ex):
-    """
-    Trend Filter Logic:
-
-    EMA9 > EMA21 = UPTREND   → Sirf BUY lo
-    EMA9 < EMA21 = DOWNTREND → Sirf SELL lo
-    EMA9 = EMA21 = SIDEWAYS  → Trade mat karo
-
-    Isse bot trend ke against
-    trade nahi karega
-    """
-    try:
-        bars = safe_fetch_ohlcv(
-            ex,
-            tf=TREND_TF,
-            limit=TREND_CANDLES + 5)
-
-        if not bars or len(bars) < EMA_SLOW:
-            print("[TREND] Data kam hai")
-            return "FLAT", 0.0, 0.0
-
-        # Close prices nikalo
-        closes = [
-            float(bar[4]) for bar in bars]
-
-        # EMA calculate karo
-        ema_fast = calc_ema(closes, EMA_FAST)
-        ema_slow = calc_ema(closes, EMA_SLOW)
-
-        if ema_fast is None or ema_slow is None:
-            return "FLAT", 0.0, 0.0
-
-        # Trend decide karo
-        diff = ema_fast - ema_slow
-        diff_pct = (diff / ema_slow) * 100
-
-        if ema_fast > ema_slow:
-            trend = "UP"
-        elif ema_fast < ema_slow:
-            trend = "DOWN"
-        else:
-            trend = "FLAT"
-
-        print(
-            f"[TREND] {trend} | "
-            f"EMA{EMA_FAST}={ema_fast:.2f} | "
-            f"EMA{EMA_SLOW}={ema_slow:.2f} | "
-            f"Diff={diff_pct:.4f}%")
-
-        return trend, ema_fast, ema_slow
-
-    except Exception as e:
-        print(f"[TREND ERROR] {e}")
-        return "FLAT", 0.0, 0.0
+def calc_pnl(side, entry, exit_p, pos_size):
+    """Gross PnL before fees"""
+    if side == "BUY":
+        return (exit_p - entry) * pos_size
+    else:
+        return (entry - exit_p) * pos_size
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -678,42 +607,6 @@ def get_combined_signal(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  TREND FILTER CHECK (NEW)
-#  Signal aur Trend match karo
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def check_trend_filter(signal, trend):
-    """
-    Trend ke against trade nahi karo
-
-    UP trend   → Sirf BUY allowed
-    DOWN trend → Sirf SELL allowed
-    FLAT trend → Koi trade nahi
-
-    Return:
-    True  = Trade allowed
-    False = Trade block karo
-    """
-    if trend == "UP" and signal == "BUY":
-        return True
-    elif trend == "DOWN" and signal == "SELL":
-        return True
-    else:
-        return False
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  PnL CALCULATOR
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def calc_pnl(side, entry, exit_p, pos_size):
-    if side == "BUY":
-        return (exit_p - entry) * pos_size
-    else:
-        return (entry - exit_p) * pos_size
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  PERIODIC UPDATE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -731,12 +624,12 @@ def run_periodic_update():
             price    = st["last_price"]
             capital  = st["capital"]
             entry    = st["entry_price"]
+            psize    = st["pos_size"]
             etime    = st["entry_time"]
             ob_sig   = st["ob_signal"]
             fl_sig   = st["flow_signal"]
             fees     = st["fees"]
             exposure = st["exposure"]
-            trend    = st["trend"]
 
             daily = get_daily_stats()
 
@@ -745,9 +638,9 @@ def run_periodic_update():
                     price > 0):
 
                 gross_pnl = calc_pnl(
-                    pos, entry, price,
-                    st["pos_size"])
-                net_pnl   = gross_pnl - fees
+                    pos, entry,
+                    price, psize)
+                net_pnl = gross_pnl - fees
                 dur = str(
                     datetime.now() -
                     etime).split(".")[0]
@@ -771,7 +664,6 @@ def run_periodic_update():
                     f"{net_pnl:+.4f} USDT\n"
                     f"Exposure : "
                     f"{exposure:.2f} USDT\n"
-                    f"Trend    : {trend}\n"
                     f"OB       : {ob_sig}\n"
                     f"Flow     : {fl_sig}\n"
                     f"Capital  : "
@@ -784,7 +676,6 @@ def run_periodic_update():
                     f"━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"⏳ WAITING\n"
                     f"Price    : {price:.4f}\n"
-                    f"Trend    : {trend}\n"
                     f"OB       : {ob_sig}\n"
                     f"Flow     : {fl_sig}\n"
                     f"Capital  : "
@@ -899,17 +790,13 @@ def run_trading_engine():
     trade_fees         = 0.0
     cooldown_end       = load_cooldown()
     consecutive_losses = 0
-    current_trend      = "FLAT"
 
     sample_exposure = (
         CAPITAL * CAPITAL_USE / 100 *
         LEVERAGE)
-    sample_fees     = calc_fees(
-        sample_exposure)
-    sample_net_win  = calc_net_tp(
-        sample_exposure)
-    sample_net_loss = calc_net_sl(
-        sample_exposure)
+    sample_fees    = calc_fees(sample_exposure)
+    sample_net_win = calc_net_tp(sample_exposure)
+    sample_net_loss= calc_net_sl(sample_exposure)
 
     print("[ENGINE] Started ✅")
 
@@ -917,12 +804,11 @@ def run_trading_engine():
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
         f"  ETH HF BOT v3.0\n"
         f"  MEXC Exchange\n"
-        f"  Trend Filter ON ✅\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
         f"Symbol   : ETH/USDT\n"
-        f"Capital  : {CAPITAL:.2f} USDT\n"
+        f"Capital  : {capital:.4f} USDT\n"
         f"Use (90%): "
-        f"{CAPITAL * CAPITAL_USE / 100:.2f}"
+        f"{capital * CAPITAL_USE / 100:.4f}"
         f" USDT\n"
         f"Leverage : {LEVERAGE}x\n"
         f"Exposure : "
@@ -938,15 +824,10 @@ def run_trading_engine():
         f"Net Loss : "
         f"-{sample_net_loss:.4f} USDT\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Trend    : EMA{EMA_FAST}/"
-        f"EMA{EMA_SLOW}\n"
-        f"Strategy : OB+Flow+Vel+Trend\n"
+        f"Strategy : OB+Flow+Velocity\n"
         f"Scan     : Har {SCAN_INTERVAL}s\n"
         f"━━━━━━━━━━━━━━━━━━━━━━"
     )
-
-    # Trend har 10 seconds mein update
-    trend_counter = 0
 
     while True:
         try:
@@ -960,16 +841,6 @@ def run_trading_engine():
                 continue
 
             update_price_history(cur_price)
-
-            # ── Trend Update ──────────────
-            # Har 10 second mein trend check
-            trend_counter += 1
-            if trend_counter >= 10:
-                trend_counter = 0
-                current_trend, ema_f, ema_s = (
-                    analyze_trend(ex))
-                update_state(
-                    trend=current_trend)
 
             # ── Analysis ──────────────────
             ob_signal, mid_price, spread, ob_ratio = (
@@ -988,10 +859,6 @@ def run_trading_engine():
                     flow_signal,
                     vel_signal))
 
-            # ── Trend Filter Check ────────
-            trend_allowed = check_trend_filter(
-                final_signal, current_trend)
-
             # State update
             update_state(
                 last_price=cur_price,
@@ -1009,7 +876,6 @@ def run_trading_engine():
                 flow_signal=flow_signal,
                 velocity=velocity,
                 last_signal=final_signal,
-                trend=current_trend,
             )
 
             # ══════════════════════════════
@@ -1037,8 +903,7 @@ def run_trading_engine():
                     f"{position} | "
                     f"Net={net_pnl:+.4f} | "
                     f"Price={cur_price:.4f} | "
-                    f"Held={held}s/{MAX_HOLD}s | "
-                    f"Trend={current_trend}")
+                    f"Held={held}s/{MAX_HOLD}s")
 
                 hit_tp = (
                     (position == "BUY" and
@@ -1098,8 +963,7 @@ def run_trading_engine():
                         trade_fees,
                         capital,
                         duration,
-                        label,
-                        current_trend)
+                        label)
 
                     print(
                         f"[CLOSED] {label} | "
@@ -1131,8 +995,6 @@ def run_trading_engine():
                         f"Capital  : "
                         f"{capital:.4f} USDT\n"
                         f"Duration : {duration}\n"
-                        f"Trend    : "
-                        f"{current_trend}\n"
                         f"OB       : {ob_signal}\n"
                         f"Flow     : "
                         f"{flow_signal}\n"
@@ -1181,18 +1043,6 @@ def run_trading_engine():
                 if final_signal in [
                         "BUY", "SELL"]:
 
-                    # ── Trend Filter ──────
-                    if not trend_allowed:
-                        print(
-                            f"[{now}] "
-                            f"TREND BLOCK | "
-                            f"Signal={final_signal}"
-                            f" | Trend="
-                            f"{current_trend} ❌")
-                        time.sleep(SCAN_INTERVAL)
-                        continue
-
-                    # ── Spread Check ──────
                     if spread > MAX_SPREAD:
                         print(
                             f"[SKIP] "
@@ -1201,13 +1051,18 @@ def run_trading_engine():
                         time.sleep(SCAN_INTERVAL)
                         continue
 
+                    # Capital & Exposure
                     capital_used = (
                         capital *
                         CAPITAL_USE / 100)
                     exposure = (
                         capital_used * LEVERAGE)
+
+                    # Position size
                     pos_size = (
                         exposure / cur_price)
+
+                    # MEXC Fee calculate
                     trade_fees = calc_fees(
                         exposure)
 
@@ -1216,6 +1071,7 @@ def run_trading_engine():
                     position     = final_signal
                     cooldown_end = None
 
+                    # Expected Net PnL
                     exp_net_win  = calc_net_tp(
                         exposure)
                     exp_net_loss = calc_net_sl(
@@ -1242,7 +1098,7 @@ def run_trading_engine():
                         f"{entry_price:.4f} | "
                         f"TP={tp_price:.4f} | "
                         f"SL={sl_price:.4f} | "
-                        f"Trend={current_trend} | "
+                        f"Fees={trade_fees:.4f} | "
                         f"Strength={strength}/3")
 
                     send_telegram(
@@ -1272,8 +1128,6 @@ def run_trading_engine():
                         f"Exp Loss : "
                         f"-{exp_net_loss:.4f} USDT\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Trend    : "
-                        f"{current_trend} ✅\n"
                         f"OB       : {ob_signal}\n"
                         f"Flow     : "
                         f"{flow_signal}\n"
@@ -1291,7 +1145,6 @@ def run_trading_engine():
                         f"OB={ob_signal} | "
                         f"Flow={flow_signal} | "
                         f"Vel={vel_signal} | "
-                        f"Trend={current_trend} | "
                         f"Price={cur_price:.4f}")
 
         except Exception as e:
@@ -1324,7 +1177,7 @@ if __name__ == "__main__":
     print("=" * 50)
     print("  ETH HF SCALPING BOT v3.0")
     print("  MEXC — Zero Maker Fee")
-    print("  Trend Filter: EMA9/EMA21")
+    print("  Order Book + Flow + Velocity")
     print("=" * 50)
     print(f"  Symbol    : ETH/USDT")
     print(f"  Exchange  : MEXC")
@@ -1334,19 +1187,17 @@ if __name__ == "__main__":
     print(f"  Exposure  : {exposure} USDT")
     print(f"  TP        : {TP_PCT}%")
     print(f"  SL        : {SL_PCT}%")
-    print(f"  Max Hold  : {MAX_HOLD}s")
+    print(f"  Max Hold  : {MAX_HOLD}s ✅")
     print(f"  Taker Fee : {TAKER_FEE}%")
     print(f"  Fee/Trade : {fees_per_trade} USDT")
     print(f"  Net Win   : +{net_win} USDT")
     print(f"  Net Loss  : -{net_loss} USDT")
     print(f"  Scan      : Har {SCAN_INTERVAL}s")
-    print(f"  Trend     : EMA{EMA_FAST}/"
-          f"EMA{EMA_SLOW} ON ✅")
     print("=" * 50)
     print(f"  RR Ratio  : "
           f"1:{round(net_win/net_loss, 2)}")
     print(f"  Min WR Req: "
-          f"{round(net_loss/(net_win+net_loss)*100, 1)}%")
+          f"{round(net_loss/(net_win+net_loss)*100,1)}%")
     print("=" * 50)
 
     threads = [
