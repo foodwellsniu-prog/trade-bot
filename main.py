@@ -1,3 +1,22 @@
+"""
+ETH High Frequency Scalping Bot v3.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Strategy : Order Book + Trade Flow 
+           + Price Velocity
+           Next few seconds predict karo
+           Us side entry lo
+           Seconds mein exit karo
+Exchange : MEXC Futures
+Symbol   : ETH/USDT
+Capital  : 10000 USDT
+Leverage : 5x
+TP       : 0.05%
+SL       : 0.03%
+Max Hold : 10 seconds
+MEXC Fee : 0.02% Maker / 0.06% Taker
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+
 import ccxt
 import pandas as pd
 import numpy as np
@@ -8,383 +27,1371 @@ import json
 import os
 from flask import Flask
 from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "ETH HF Scalping Bot v3.1 (Capital: 10k | Fees Added | Optimized) Running!"
+    return "ETH HF Scalping Bot v3.0 Running!"
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  CONFIG
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 SYMBOL     = "ETH/USDT:USDT"
 API_KEY    = ""
 API_SECRET = ""
 BOT_TOKEN  = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
 CHAT_ID    = "7102976298"
 
-# ── Capital & Fees ───────────────────────
-CAPITAL      = 10000.0          # ✅ 10k USDT as requested
-CAPITAL_USE  = 90               # 90% capital use per trade
-LEVERAGE     = 5
-MXC_FEE_PCT  = 0.05             # MXC taker fee per side (0.05%)
-TOTAL_FEE_PCT= MXC_FEE_PCT * 2  # Entry + Exit fees
+# ── Capital ───────────────────────────────
+CAPITAL     = 10000.0          # 10,000 USDT
+CAPITAL_USE = 90               # 90% use
+LEVERAGE    = 5
 
-# ── Trade Config ─────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  MEXC FEE CONFIG
+#  ETH Futures pe MEXC charges:
+#  Maker Fee : 0.02% (limit orders)
+#  Taker Fee : 0.06% (market orders)
+#  Entry + Exit dono pe fee lagti hai
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MEXC_MAKER_FEE  = 0.0002   # 0.02%
+MEXC_TAKER_FEE  = 0.0006   # 0.06%
+
+# HF Scalping mein market orders use hote hain
+# isliye TAKER fee lagegi entry + exit dono pe
+MEXC_ENTRY_FEE  = MEXC_TAKER_FEE   # 0.06% entry
+MEXC_EXIT_FEE   = MEXC_TAKER_FEE   # 0.06% exit
+MEXC_TOTAL_FEE  = MEXC_ENTRY_FEE + MEXC_EXIT_FEE  # 0.12% total
+
+# Fee example:
+# Capital Used = 9000 USDT
+# Leverage 5x  = 45000 USDT exposure
+# Entry Fee    = 45000 * 0.06% = 27 USDT
+# Exit Fee     = 45000 * 0.06% = 27 USDT
+# Total Fee    = 54 USDT per trade
+
+# ── Trade Config ──────────────────────────
 TP_PCT   = 0.05    # 0.05% target
 SL_PCT   = 0.03    # 0.03% stop loss
 MAX_HOLD = 10      # 10 seconds max
 
-# ── Speed ─────────────────────────────────
-SCAN_INTERVAL = 0.1  # ⚠️ 0.1s = 10x/sec. <0.05s will trigger rate limits
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  SPEED CONFIG
+#  1M+ trades/day ke liye ultra fast scan
+#  1,000,000 trades / 86400 seconds = ~11.5 trades/sec
+#  Isliye scan interval bahut kam rakha
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# ── Cooldown ──────────────────────────────
-COOLDOWN_WIN   = 0.5   # Win ke baad 0.5s
-COOLDOWN_LOSS  = 1.0   # Loss ke baad 1s
-COOLDOWN_2LOSS = 2.0   # 2 loss ke baad 2s
+SCAN_INTERVAL       = 0.05   # 50ms = 20 scans/sec
+ANALYSIS_WORKERS    = 4      # Parallel analysis threads
+MAX_CONCURRENT_OPS  = 10     # Max concurrent operations
+
+# ── Cooldown (Ultra Low for HF) ───────────
+COOLDOWN_WIN   = 0.1    # 100ms win ke baad
+COOLDOWN_LOSS  = 0.5    # 500ms loss ke baad
+COOLDOWN_2LOSS = 1.0    # 1s 2 loss ke baad
 
 # ── Spread ────────────────────────────────
 MAX_SPREAD = 0.05
 
 # ── Order Book Config ─────────────────────
-OB_LEVELS      = 10
-OB_IMBALANCE   = 1.5
+OB_LEVELS    = 10     # Top 10 levels
+OB_IMBALANCE = 1.5    # 1.5x imbalance
 
 # ── Update ────────────────────────────────
 UPDATE_INTERVAL = 1800
 
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  FILES & STATE
+#  FILES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FILES = {"capital": "capital_eth.txt", "cooldown": "cooldown_eth.txt", 
-         "history": "history_eth.json", "log": "log_eth.json"}
+
+FILES = {
+    "capital":  "capital_eth.txt",
+    "cooldown": "cooldown_eth.txt",
+    "history":  "history_eth.json",
+    "log":      "log_eth.json",
+    "fees":     "fees_eth.json",
+}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  STATE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 state_lock = threading.Lock()
-state = {"position": None, "entry_price": 0.0, "entry_time": None, "sl_price": 0.0,
-         "tp_price": 0.0, "pos_size": 0.0, "capital_used": 0.0, "capital": CAPITAL,
-         "last_price": 0.0, "last_signal": "WAIT", "ob_signal": "FLAT", 
-         "flow_signal": "FLAT", "velocity": 0.0}
+
+state = {
+    "position":      None,
+    "entry_price":   0.0,
+    "entry_time":    None,
+    "sl_price":      0.0,
+    "tp_price":      0.0,
+    "pos_size":      0.0,
+    "capital_used":  0.0,
+    "capital":       CAPITAL,
+    "last_price":    0.0,
+    "last_signal":   "WAIT",
+    "ob_signal":     "FLAT",
+    "flow_signal":   "FLAT",
+    "velocity":      0.0,
+    "total_fees":    0.0,    # Total fees paid
+    "trade_count":   0,      # Total trades today
+    "daily_fee":     0.0,    # Daily fee total
+}
 
 def update_state(**kwargs):
     with state_lock:
         for k, v in kwargs.items():
-            if k in state: state[k] = v
+            if k in state:
+                state[k] = v
 
 def get_state(key):
-    with state_lock: return state.get(key)
+    with state_lock:
+        return state.get(key)
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CAPITAL & COOLDOWN HANDLERS
+#  MEXC FEE CALCULATOR
+#  Har trade pe fee calculate karo
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def calculate_mexc_fee(capital_used, leverage):
+    """
+    MEXC ETH Futures Fee Calculator
+
+    Formula:
+    Exposure    = capital_used * leverage
+    Entry Fee   = exposure * TAKER_FEE (0.06%)
+    Exit Fee    = exposure * TAKER_FEE (0.06%)
+    Total Fee   = Entry Fee + Exit Fee
+
+    Note: Fee always ETH/USDT pe USDT mein hoti hai
+    """
+    exposure   = capital_used * leverage
+    entry_fee  = exposure * MEXC_ENTRY_FEE
+    exit_fee   = exposure * MEXC_EXIT_FEE
+    total_fee  = entry_fee + exit_fee
+
+    return {
+        "exposure":  round(exposure, 4),
+        "entry_fee": round(entry_fee, 4),
+        "exit_fee":  round(exit_fee, 4),
+        "total_fee": round(total_fee, 4),
+    }
+
+
+def calc_net_pnl(
+        side, entry, exit_p,
+        pos_size, capital_used, leverage):
+    """
+    Net PnL = Gross PnL - Total MEXC Fees
+
+    Gross PnL = price_diff * position_size
+    Net PnL   = Gross PnL - (entry_fee + exit_fee)
+    """
+    # Gross PnL
+    if side == "BUY":
+        gross_pnl = (exit_p - entry) * pos_size
+    else:
+        gross_pnl = (entry - exit_p) * pos_size
+
+    # MEXC Fees
+    fees = calculate_mexc_fee(
+        capital_used, leverage)
+    total_fee = fees["total_fee"]
+
+    # Net PnL after fees
+    net_pnl = gross_pnl - total_fee
+
+    return {
+        "gross_pnl": round(gross_pnl, 6),
+        "entry_fee": fees["entry_fee"],
+        "exit_fee":  fees["exit_fee"],
+        "total_fee": total_fee,
+        "net_pnl":   round(net_pnl, 6),
+    }
+
+
+def save_fee_stats(fee_data):
+    """Daily fee tracking"""
+    try:
+        try:
+            with open(
+                    FILES["fees"], "r",
+                    encoding="utf-8") as f:
+                stats = json.load(f)
+        except Exception:
+            stats = {"total": 0.0, "trades": []}
+
+        stats["total"] = round(
+            stats["total"] + fee_data["total_fee"], 6)
+        stats["trades"].append({
+            "time":      datetime.now().strftime(
+                "%H:%M:%S"),
+            "entry_fee": fee_data["entry_fee"],
+            "exit_fee":  fee_data["exit_fee"],
+            "total":     fee_data["total_fee"],
+        })
+
+        with open(
+                FILES["fees"], "w",
+                encoding="utf-8") as f:
+            json.dump(stats, f, indent=2)
+
+    except Exception as e:
+        print(f"[FEE SAVE ERROR] {e}")
+
+
+def get_daily_fee_total():
+    try:
+        with open(
+                FILES["fees"], "r",
+                encoding="utf-8") as f:
+            stats = json.load(f)
+        return stats.get("total", 0.0)
+    except Exception:
+        return 0.0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  CAPITAL
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 def load_capital():
     try:
-        with open(FILES["capital"], "r") as f: return float(f.read().strip())
-    except: 
+        with open(FILES["capital"], "r") as f:
+            cap = float(f.read().strip())
+            print(f"[CAPITAL] Loaded: {cap} USDT")
+            return cap
+    except Exception:
         save_capital(CAPITAL)
         return CAPITAL
 
 def save_capital(capital):
     try:
-        with open(FILES["capital"], "w") as f: f.write(str(round(capital, 6)))
-    except Exception as e: print(f"[CAPITAL ERROR] {e}")
+        with open(FILES["capital"], "w") as f:
+            f.write(str(round(capital, 6)))
+    except Exception as e:
+        print(f"[CAPITAL ERROR] {e}")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  COOLDOWN
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def save_cooldown(end_time):
     try:
-        with open(FILES["cooldown"], "w") as f: f.write(str(end_time))
-    except Exception as e: print(f"[COOLDOWN ERROR] {e}")
+        with open(FILES["cooldown"], "w") as f:
+            f.write(str(end_time))
+    except Exception as e:
+        print(f"[COOLDOWN ERROR] {e}")
 
 def load_cooldown():
     try:
         with open(FILES["cooldown"], "r") as f:
             val = float(f.read().strip())
-            return val if val > time.time() else None
-    except: return None
+            if val > time.time():
+                print(
+                    f"[COOLDOWN] "
+                    f"{int(val - time.time())}s")
+                return val
+    except Exception:
+        pass
+    return None
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  TRADE HISTORY & STATS
+#  TRADE HISTORY
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def save_trade(side, entry, exit_p, pnl, capital, duration, label, fee_deducted):
+
+history_lock = threading.Lock()
+
+def save_trade(
+        side, entry, exit_p,
+        gross_pnl, net_pnl,
+        total_fee, capital,
+        duration, label):
     try:
-        with open(FILES["history"], "r", encoding="utf-8") as f: history = json.load(f)
-    except: history = []
-    history.append({"date": datetime.now().strftime("%d/%m/%Y"), "time": datetime.now().strftime("%H:%M:%S"),
-                    "symbol": "ETH", "side": side, "entry": round(entry, 4), "exit": round(exit_p, 4),
-                    "pnl": round(pnl, 4), "capital": round(capital, 4), "duration": duration,
-                    "result": "WIN" if pnl > 0 else "LOSS", "label": label, "fee_deducted": round(fee_deducted, 4)})
-    with open(FILES["history"], "w", encoding="utf-8") as f: json.dump(history, f, indent=2)
-    except Exception as e: print(f"[HISTORY ERROR] {e}")
+        with history_lock:
+            try:
+                with open(
+                        FILES["history"], "r",
+                        encoding="utf-8") as f:
+                    history = json.load(f)
+            except Exception:
+                history = []
+
+            history.append({
+                "date":       datetime.now().strftime(
+                    "%d/%m/%Y"),
+                "time":       datetime.now().strftime(
+                    "%H:%M:%S"),
+                "symbol":     "ETH",
+                "side":       side,
+                "entry":      round(entry, 4),
+                "exit":       round(exit_p, 4),
+                "gross_pnl":  round(gross_pnl, 4),
+                "fee":        round(total_fee, 4),
+                "net_pnl":    round(net_pnl, 4),
+                "capital":    round(capital, 4),
+                "duration":   duration,
+                "result":     (
+                    "WIN" if net_pnl > 0
+                    else "LOSS"),
+                "label":      label,
+            })
+
+            with open(
+                    FILES["history"], "w",
+                    encoding="utf-8") as f:
+                json.dump(history, f, indent=2)
+
+    except Exception as e:
+        print(f"[HISTORY ERROR] {e}")
+
 
 def get_daily_stats():
     try:
-        with open(FILES["history"], "r", encoding="utf-8") as f: history = json.load(f)
-    except: return None
-    today = datetime.now().strftime("%d/%m/%Y")
-    trades = [t for t in history if t["date"] == today]
-    if not trades: return None
-    wins = len([t for t in trades if t["result"] == "WIN"])
-    total = len(trades)
-    return {"total": total, "wins": wins, "losses": total - wins, "win_rate": round((wins/total)*100, 1),
-            "pnl": round(sum(t["pnl"] for t in trades), 4), "best": round(max(t["pnl"] for t in trades), 4),
-            "worst": round(min(t["pnl"] for t in trades), 4), "capital": trades[-1]["capital"]}
+        with open(
+                FILES["history"], "r",
+                encoding="utf-8") as f:
+            history = json.load(f)
+    except Exception:
+        return None
+
+    today  = datetime.now().strftime(
+        "%d/%m/%Y")
+    trades = [
+        t for t in history
+        if t["date"] == today]
+
+    if not trades:
+        return None
+
+    total    = len(trades)
+    wins     = len([
+        t for t in trades
+        if t["result"] == "WIN"])
+    losses   = total - wins
+    win_rate = round(
+        (wins / total) * 100, 1)
+
+    # Net PnL (after fees)
+    net_pnl   = round(
+        sum(t["net_pnl"] for t in trades), 4)
+
+    # Gross PnL (before fees)
+    gross_pnl = round(
+        sum(t["gross_pnl"] for t in trades), 4)
+
+    # Total fees paid
+    total_fees = round(
+        sum(t["fee"] for t in trades), 4)
+
+    return {
+        "total":      total,
+        "wins":       wins,
+        "losses":     losses,
+        "win_rate":   win_rate,
+        "net_pnl":    net_pnl,
+        "gross_pnl":  gross_pnl,
+        "total_fees": total_fees,
+        "best":       round(
+            max(t["net_pnl"] for t in trades), 4),
+        "worst":      round(
+            min(t["net_pnl"] for t in trades), 4),
+        "capital":    trades[-1]["capital"],
+    }
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  EXCHANGE & RATE LIMIT SAFE FETCH
+#  EXCHANGE (MEXC)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 def get_exchange():
     while True:
         try:
-            ex = ccxt.binanceusdm({"apiKey": API_KEY, "secret": API_SECRET, "enableRateLimit": True, "rateLimit": 50})
+            ex = ccxt.mexc({
+                "apiKey":          API_KEY,
+                "secret":          API_SECRET,
+                "enableRateLimit": True,
+                "rateLimit":       10,      # Ultra fast
+                "options": {
+                    "defaultType":     "swap",
+                    "adjustForTimeDifference": True,
+                },
+            })
             ex.load_markets()
-            print("[INFO] Exchange connected ✅")
+            print("[INFO] MEXC connected ✅")
             return ex
         except Exception as e:
             print(f"[RECONNECT] {e} — 30s...")
             time.sleep(30)
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  FAST DATA FETCH
+#  Speed ke liye cached data use karo
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Cache for ultra-fast access
+cache_lock = threading.Lock()
+data_cache = {
+    "ticker":    None,
+    "orderbook": None,
+    "trades":    None,
+    "ticker_ts":    0,
+    "orderbook_ts": 0,
+    "trades_ts":    0,
+}
+
+TICKER_TTL    = 0.05   # 50ms cache
+ORDERBOOK_TTL = 0.1    # 100ms cache
+TRADES_TTL    = 0.2    # 200ms cache
+
+
 def safe_fetch_ticker(ex):
-    try: return float(ex.fetch_ticker(SYMBOL)["last"])
-    except: return None
+    now = time.time()
+    with cache_lock:
+        if (data_cache["ticker"] is not None and
+                now - data_cache["ticker_ts"]
+                < TICKER_TTL):
+            return data_cache["ticker"]
+
+    for i in range(3):
+        try:
+            t = ex.fetch_ticker(SYMBOL)
+            price = float(t["last"])
+            with cache_lock:
+                data_cache["ticker"]    = price
+                data_cache["ticker_ts"] = time.time()
+            return price
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 2)
+            else:
+                time.sleep(0.1)
+    return None
+
 
 def safe_fetch_orderbook(ex, limit=10):
-    for i in range(2):
-        try: return ex.fetch_order_book(SYMBOL, limit=limit)
-        except: time.sleep(0.2)
+    now = time.time()
+    with cache_lock:
+        if (data_cache["orderbook"] is not None and
+                now - data_cache["orderbook_ts"]
+                < ORDERBOOK_TTL):
+            return data_cache["orderbook"]
+
+    for i in range(3):
+        try:
+            ob = ex.fetch_order_book(
+                SYMBOL, limit=limit)
+            with cache_lock:
+                data_cache["orderbook"]    = ob
+                data_cache["orderbook_ts"] = time.time()
+            return ob
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 2)
+            else:
+                time.sleep(0.1)
     return None
 
+
 def safe_fetch_trades(ex, limit=50):
-    for i in range(2):
-        try: return ex.fetch_trades(SYMBOL, limit=limit)
-        except: time.sleep(0.2)
+    now = time.time()
+    with cache_lock:
+        if (data_cache["trades"] is not None and
+                now - data_cache["trades_ts"]
+                < TRADES_TTL):
+            return data_cache["trades"]
+
+    for i in range(3):
+        try:
+            trades = ex.fetch_trades(
+                SYMBOL, limit=limit)
+            with cache_lock:
+                data_cache["trades"]    = trades
+                data_cache["trades_ts"] = time.time()
+            return trades
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 2)
+            else:
+                time.sleep(0.1)
     return None
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  TELEGRAM
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+telegram_queue  = []
+telegram_lock   = threading.Lock()
+
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    with telegram_lock:
+        telegram_queue.append(message)
+
+def telegram_worker():
+    """Async telegram sender - non-blocking"""
+    url = (
+        f"https://api.telegram.org/bot"
+        f"{BOT_TOKEN}/sendMessage")
+    while True:
+        try:
+            msg = None
+            with telegram_lock:
+                if telegram_queue:
+                    msg = telegram_queue.pop(0)
+
+            if msg:
+                for attempt in range(3):
+                    try:
+                        r = requests.post(
+                            url,
+                            data={
+                                "chat_id": CHAT_ID,
+                                "text":    f"[SCALP] {msg}",
+                            },
+                            timeout=10)
+                        if r.status_code == 200:
+                            break
+                    except Exception as e:
+                        print(
+                            f"[TG] {attempt+1}/3: {e}")
+                        time.sleep(1)
+            else:
+                time.sleep(0.1)
+        except Exception as e:
+            print(f"[TG WORKER] {e}")
+            time.sleep(1)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ANALYSIS FUNCTIONS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def analyze_orderbook(ex):
     try:
-        requests.post(url, data={"chat_id": CHAT_ID, "text": f"[SCALP] {message}"}, timeout=15)
-    except: pass
+        ob = safe_fetch_orderbook(
+            ex, limit=OB_LEVELS)
+        if ob is None:
+            return "FLAT", 0.0, 0.0, 0.0
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  💰 PnL CALCULATOR WITH FEES
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def calculate_pnl_with_fees(side, entry, exit_p, pos_size, fee_pct=MXC_FEE_PCT):
-    trade_value = pos_size * entry
-    fee_per_side = trade_value * (fee_pct / 100)
-    total_fee = fee_per_side * 2  # Entry + Exit
-    
-    if side == "BUY":
-        raw_pnl = (exit_p - entry) * pos_size
-    else:
-        raw_pnl = (entry - exit_p) * pos_size
-        
-    net_pnl = raw_pnl - total_fee
-    return net_pnl, total_fee
+        bids = ob["bids"]
+        asks = ob["asks"]
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  SIGNALS (OB + FLOW + VELOCITY)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        if not bids or not asks:
+            return "FLAT", 0.0, 0.0, 0.0
+
+        best_bid = float(bids[0][0])
+        best_ask = float(asks[0][0])
+
+        spread = (
+            (best_ask - best_bid) /
+            best_bid) * 100
+
+        if spread > MAX_SPREAD:
+            return "FLAT", 0.0, spread, 0.0
+
+        bid_vol = sum(
+            float(b[1]) for b in bids[:10])
+        ask_vol = sum(
+            float(a[1]) for a in asks[:10])
+
+        if ask_vol == 0:
+            return "FLAT", 0.0, spread, 0.0
+
+        ratio = bid_vol / ask_vol
+
+        if ratio >= OB_IMBALANCE:
+            signal = "BUY"
+        elif ratio <= (1 / OB_IMBALANCE):
+            signal = "SELL"
+        else:
+            signal = "FLAT"
+
+        mid_price = (best_bid + best_ask) / 2
+        return signal, mid_price, spread, ratio
+
+    except Exception as e:
+        print(f"[OB ERROR] {e}")
+        return "FLAT", 0.0, 0.0, 0.0
+
+
+def analyze_trade_flow(ex):
+    try:
+        trades = safe_fetch_trades(ex, limit=50)
+        if not trades:
+            return "FLAT", 0.0, 0.0
+
+        buy_vol  = 0.0
+        sell_vol = 0.0
+
+        for t in trades:
+            side = t.get("side", "")
+            amt  = float(t.get("amount", 0))
+            if side == "buy":
+                buy_vol += amt
+            elif side == "sell":
+                sell_vol += amt
+
+        if sell_vol == 0:
+            return "FLAT", 0.0, 0.0
+
+        ratio = buy_vol / sell_vol
+
+        if ratio >= 1.3:
+            signal = "BUY"
+        elif ratio <= 0.7:
+            signal = "SELL"
+        else:
+            signal = "FLAT"
+
+        return signal, buy_vol, sell_vol
+
+    except Exception as e:
+        print(f"[FLOW ERROR] {e}")
+        return "FLAT", 0.0, 0.0
+
+
+# ── Price Velocity ────────────────────────
 price_history = []
 price_lock    = threading.Lock()
 
 def update_price_history(price):
     with price_lock:
-        price_history.append({"price": price, "time": time.time()})
-        cutoff = time.time() - 30
-        while price_history and price_history[0]["time"] < cutoff: price_history.pop(0)
-
-def analyze_orderbook(ex):
-    try:
-        ob = safe_fetch_orderbook(ex)
-        if not ob or not ob["bids"] or not ob["asks"]: return "FLAT", 0.0, 0.0, 0.0
-        best_bid, best_ask = float(ob["bids"][0][0]), float(ob["asks"][0][0])
-        spread = ((best_ask - best_bid) / best_bid) * 100
-        if spread > MAX_SPREAD: return "FLAT", 0.0, spread, 0.0
-        
-        bid_vol = sum(float(b[1]) for b in ob["bids"][:10])
-        ask_vol = sum(float(a[1]) for a in ob["asks"][:10])
-        if ask_vol == 0: return "FLAT", 0.0, spread, 0.0
-        
-        ratio = bid_vol / ask_vol
-        signal = "BUY" if ratio >= OB_IMBALANCE else ("SELL" if ratio <= (1/OB_IMBALANCE) else "FLAT")
-        return signal, (best_bid+best_ask)/2, spread, ratio
-    except: return "FLAT", 0.0, 0.0, 0.0
-
-def analyze_trade_flow(ex):
-    try:
-        trades = safe_fetch_trades(ex)
-        if not trades: return "FLAT", 0.0, 0.0
-        buy_vol = sum(float(t["amount"]) for t in trades if t.get("side")=="buy")
-        sell_vol = sum(float(t["amount"]) for t in trades if t.get("side")=="sell")
-        if sell_vol == 0: return "FLAT", 0.0, 0.0
-        ratio = buy_vol / sell_vol
-        signal = "BUY" if ratio >= 1.3 else ("SELL" if ratio <= 0.7 else "FLAT")
-        return signal, buy_vol, sell_vol
-    except: return "FLAT", 0.0, 0.0
+        price_history.append({
+            "price": price,
+            "time":  time.time(),
+        })
+        cutoff = time.time() - 10  # 10s window
+        while (price_history and
+               price_history[0]["time"] < cutoff):
+            price_history.pop(0)
 
 def analyze_velocity():
     try:
         with price_lock:
-            if len(price_history) < 3: return "FLAT", 0.0
+            if len(price_history) < 3:
+                return "FLAT", 0.0
+
             recent = price_history[-10:]
-            first, last = recent[0]["price"], recent[-1]["price"]
-            t1, t2 = recent[0]["time"], recent[-1]["time"]
-            if t2 == t1: return "FLAT", 0.0
-            pct = ((last - first) / first) * 100
-            signal = "BUY" if pct > 0.01 else ("SELL" if pct < -0.01 else "FLAT")
+            if len(recent) < 2:
+                return "FLAT", 0.0
+
+            first = recent[0]["price"]
+            last  = recent[-1]["price"]
+            t1    = recent[0]["time"]
+            t2    = recent[-1]["time"]
+
+            if t2 == t1:
+                return "FLAT", 0.0
+
+            change   = last - first
+            t_diff   = t2 - t1
+            velocity = change / t_diff
+            pct      = (change / first) * 100
+
+            if pct > 0.008:      # Lower threshold for HF
+                signal = "BUY"
+            elif pct < -0.008:
+                signal = "SELL"
+            else:
+                signal = "FLAT"
+
             return signal, pct
-    except: return "FLAT", 0.0
 
-def get_combined_signal(ob, flow, vel):
-    signals = [ob, flow, vel]
-    buy = signals.count("BUY")
-    sell = signals.count("SELL")
-    return ("BUY", buy) if buy >= 2 else (("SELL", sell) if sell >= 2 else ("FLAT", 0))
+    except Exception as e:
+        print(f"[VEL ERROR] {e}")
+        return "FLAT", 0.0
+
+
+def get_combined_signal(
+        ob_signal,
+        flow_signal,
+        vel_signal):
+    signals   = [ob_signal, flow_signal, vel_signal]
+    buy_count  = signals.count("BUY")
+    sell_count = signals.count("SELL")
+
+    if buy_count >= 2:
+        return "BUY", buy_count
+    elif sell_count >= 2:
+        return "SELL", sell_count
+    else:
+        return "FLAT", 0
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  BACKGROUND THREADS
+#  PERIODIC UPDATE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 def run_periodic_update():
     time.sleep(UPDATE_INTERVAL)
     while True:
         try:
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with state_lock: st = dict(state)
-            pos, price, capital, entry, ob_sig, fl_sig = st["position"], st["last_price"], st["capital"], st["entry_price"], st["ob_signal"], st["flow_signal"]
+            now = datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S")
+
+            with state_lock:
+                st = dict(state)
+
+            pos     = st["position"]
+            price   = st["last_price"]
+            capital = st["capital"]
+            entry   = st["entry_price"]
+            psize   = st["pos_size"]
+            etime   = st["entry_time"]
+            ob_sig  = st["ob_signal"]
+            fl_sig  = st["flow_signal"]
+
             daily = get_daily_stats()
-            
-            msg = f"━━━━━━━━━━━━━━━━━━━━━━\n  ETH BOT UPDATE\n  {now}\n━━━━━━━━━━━━━━━━━━━━━━\n"
-            if pos:
-                pnl = calculate_pnl_with_fees(pos, entry, price, st["pos_size"])[0]
-                msg += f"{'🟢' if pnl>=0 else '🔴'} {pos} | PnL: {pnl:+.4f} USDT | Cap: {capital:.2f}\n"
-            else: msg += f"⏳ WAITING | Price: {price:.4f}\n"
-            if daily: msg += f"Today: {daily['total']} trades | WR: {daily['win_rate']}% | PnL: {daily['pnl']:+.4f}\n"
+
+            if (pos is not None and
+                    etime is not None and
+                    price > 0):
+
+                capital_used = (
+                    capital * CAPITAL_USE / 100)
+                pnl_data = calc_net_pnl(
+                    pos, entry, price,
+                    psize, capital_used, LEVERAGE)
+
+                icon = (
+                    "🟢"
+                    if pnl_data["net_pnl"] >= 0
+                    else "🔴")
+
+                msg = (
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"  ETH BOT UPDATE\n"
+                    f"  {now}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{icon} {pos}\n"
+                    f"Entry    : {entry:.4f}\n"
+                    f"Price    : {price:.4f}\n"
+                    f"GrossPnL : "
+                    f"{pnl_data['gross_pnl']:+.4f}\n"
+                    f"Fee      : "
+                    f"-{pnl_data['total_fee']:.4f}\n"
+                    f"Net PnL  : "
+                    f"{pnl_data['net_pnl']:+.4f} USDT\n"
+                    f"OB       : {ob_sig}\n"
+                    f"Flow     : {fl_sig}\n"
+                    f"Capital  : "
+                    f"{capital:.4f} USDT\n")
+            else:
+                msg = (
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"  ETH BOT UPDATE\n"
+                    f"  {now}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"⏳ WAITING\n"
+                    f"Price    : {price:.4f}\n"
+                    f"OB       : {ob_sig}\n"
+                    f"Flow     : {fl_sig}\n"
+                    f"Capital  : "
+                    f"{capital:.4f} USDT\n")
+
+            if daily:
+                msg += (
+                    f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"TODAY\n"
+                    f"Trades   : {daily['total']}\n"
+                    f"Wins     : "
+                    f"{daily['wins']} ✅\n"
+                    f"Losses   : "
+                    f"{daily['losses']} ❌\n"
+                    f"WR       : "
+                    f"{daily['win_rate']}%\n"
+                    f"GrossPnL : "
+                    f"{daily['gross_pnl']:+.4f}\n"
+                    f"Total Fee: "
+                    f"-{daily['total_fees']:.4f}\n"
+                    f"Net PnL  : "
+                    f"{daily['net_pnl']:+.4f} USDT\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━")
+
             send_telegram(msg)
-        except: pass
+
+        except Exception as e:
+            print(f"[UPDATE ERROR] {e}")
+
         time.sleep(UPDATE_INTERVAL)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  DAILY REPORT
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_daily_report():
     while True:
         try:
-            ist = timezone(timedelta(hours=5,30))
+            ist = timezone(
+                timedelta(hours=5, minutes=30))
             now = datetime.now(ist)
-            if now.hour==23 and now.minute==59:
+
+            if (now.hour == 23 and
+                    now.minute == 59):
                 daily = get_daily_stats()
+                today = now.strftime("%d/%m/%Y")
+
                 if daily:
-                    msg = f"📊 DAILY REPORT\n{daily['total']} trades | WR: {daily['win_rate']}% | PnL: {daily['pnl']:+.4f} USDT"
-                    send_telegram(msg)
+                    msg = (
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"  DAILY REPORT\n"
+                        f"  {today}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Symbol   : ETH/USDT\n"
+                        f"Exchange : MEXC\n"
+                        f"Trades   : "
+                        f"{daily['total']}\n"
+                        f"Wins     : "
+                        f"{daily['wins']} ✅\n"
+                        f"Losses   : "
+                        f"{daily['losses']} ❌\n"
+                        f"Win Rate : "
+                        f"{daily['win_rate']}%\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Gross PnL: "
+                        f"{daily['gross_pnl']:+.4f}\n"
+                        f"Total Fee: "
+                        f"-{daily['total_fees']:.4f} USDT\n"
+                        f"Net PnL  : "
+                        f"{daily['net_pnl']:+.4f} USDT\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Best     : "
+                        f"+{daily['best']:.4f}\n"
+                        f"Worst    : "
+                        f"{daily['worst']:.4f}\n"
+                        f"Capital  : "
+                        f"{daily['capital']:.4f} USDT\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"MEXC Fee Info:\n"
+                        f"Entry Fee: 0.06% (Taker)\n"
+                        f"Exit Fee : 0.06% (Taker)\n"
+                        f"Total/Trade: 0.12%\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━")
+                else:
+                    msg = (
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"  DAILY REPORT - {today}\n"
+                        f"Aaj koi trade nahi hua\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━")
+
+                send_telegram(msg)
                 time.sleep(70)
-        except: pass
+
+        except Exception as e:
+            print(f"[DAILY ERROR] {e}")
+
         time.sleep(30)
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  🚀 MAIN TRADING ENGINE
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-def run_trading_engine():
-    ex = get_exchange()
-    capital = load_capital()
-    position = None; entry_price = 0.0; entry_time = None; pos_size = 0.0
-    sl_price = 0.0; tp_price = 0.0; capital_used = 0.0; cooldown_end = load_cooldown()
-    consecutive_losses = 0
 
-    print("[ENGINE] Started ✅ | Capital: 10000 USDT | Fees Added")
-    send_telegram(f"🟢 BOT STARTED\nCapital: 10000 USDT\nFees: {MXC_FEE_PCT}% per side\nScan: {SCAN_INTERVAL}s")
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  MAIN TRADING ENGINE
+#  Ultra-fast 50ms scanning
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def run_trading_engine():
+    ex                 = get_exchange()
+    capital            = load_capital()
+    position           = None
+    entry_price        = 0.0
+    entry_time         = None
+    pos_size           = 0.0
+    sl_price           = 0.0
+    tp_price           = 0.0
+    capital_used       = 0.0
+    cooldown_end       = load_cooldown()
+    consecutive_losses = 0
+    trade_count        = 0
+
+    print("[ENGINE] Started ✅")
+
+    # Fee example calculate karo
+    example_cap = capital * CAPITAL_USE / 100
+    fees        = calculate_mexc_fee(
+        example_cap, LEVERAGE)
+
+    send_telegram(
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"  ETH HF BOT v3.0\n"
+        f"  MEXC Exchange\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Symbol   : ETH/USDT\n"
+        f"Capital  : {capital:.2f} USDT\n"
+        f"Use      : {example_cap:.2f} USDT\n"
+        f"Leverage : {LEVERAGE}x\n"
+        f"Exposure : {fees['exposure']:.2f} USDT\n"
+        f"TP       : {TP_PCT}%\n"
+        f"SL       : {SL_PCT}%\n"
+        f"Max Hold : {MAX_HOLD}s\n"
+        f"Scan     : {SCAN_INTERVAL*1000:.0f}ms\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"MEXC FEE INFO:\n"
+        f"Entry Fee: 0.06% = "
+        f"{fees['entry_fee']:.4f} USDT\n"
+        f"Exit Fee : 0.06% = "
+        f"{fees['exit_fee']:.4f} USDT\n"
+        f"Total/Trade: "
+        f"{fees['total_fee']:.4f} USDT\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Strategy : OB+Flow+Velocity\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    # ─────────────────────────────────────
+    #  Parallel analysis for speed
+    # ─────────────────────────────────────
+    executor = ThreadPoolExecutor(
+        max_workers=ANALYSIS_WORKERS)
 
     while True:
         try:
+            loop_start = time.time()
+            now = datetime.now().strftime(
+                "%H:%M:%S.%f")[:-3]
+
+            # ── Price Fetch ───────────────
             cur_price = safe_fetch_ticker(ex)
-            if not cur_price: time.sleep(SCAN_INTERVAL); continue
+            if cur_price is None:
+                time.sleep(SCAN_INTERVAL)
+                continue
+
             update_price_history(cur_price)
 
-            ob_sig, mid, spread, ob_ratio = analyze_orderbook(ex)
-            flow_sig, _, _ = analyze_trade_flow(ex)
-            vel_sig, _ = analyze_velocity()
-            final_sig, strength = get_combined_signal(ob_sig, flow_sig, vel_sig)
+            # ── Parallel Analysis ─────────
+            # Sab analysis ek saath karo
+            # Speed badhane ke liye
+            future_ob   = executor.submit(
+                analyze_orderbook, ex)
+            future_flow = executor.submit(
+                analyze_trade_flow, ex)
+            future_vel  = executor.submit(
+                analyze_velocity)
 
-            update_state(last_price=cur_price, capital=capital, position=position, 
-                         entry_price=entry_price, entry_time=entry_time, sl_price=sl_price, 
-                         tp_price=tp_price, pos_size=pos_size, capital_used=capital_used, 
-                         ob_signal=ob_sig, flow_signal=flow_sig, velocity=0.0, last_signal=final_sig)
+            ob_signal, mid_price, spread, ob_ratio = (
+                future_ob.result(timeout=2))
+            flow_signal, buy_vol, sell_vol = (
+                future_flow.result(timeout=2))
+            vel_signal, velocity = (
+                future_vel.result(timeout=1))
 
-            # ── POSITION MONITOR ────────────────────────────────
-            if position:
-                held = (datetime.now() - entry_time).total_seconds()
-                net_pnl, fee_used = calculate_pnl_with_fees(position, entry_price, cur_price, pos_size)
-                
-                hit_tp = (position=="BUY" and cur_price>=tp_price) or (position=="SELL" and cur_price<=tp_price)
-                hit_sl = (position=="BUY" and cur_price<=sl_price) or (position=="SELL" and cur_price>=sl_price)
+            # ── Combined Signal ───────────
+            final_signal, strength = (
+                get_combined_signal(
+                    ob_signal,
+                    flow_signal,
+                    vel_signal))
+
+            # State update
+            update_state(
+                last_price=cur_price,
+                capital=capital,
+                position=position,
+                entry_price=entry_price,
+                entry_time=entry_time,
+                sl_price=sl_price,
+                tp_price=tp_price,
+                pos_size=pos_size,
+                capital_used=capital_used,
+                ob_signal=ob_signal,
+                flow_signal=flow_signal,
+                velocity=velocity,
+                last_signal=final_signal,
+                trade_count=trade_count,
+            )
+
+            # ══════════════════════════════
+            #  POSITION MONITOR
+            # ══════════════════════════════
+            if position is not None:
+                held = (
+                    datetime.now() -
+                    entry_time).total_seconds()
+
+                # Live PnL (fee included)
+                pnl_data = calc_net_pnl(
+                    position, entry_price,
+                    cur_price, pos_size,
+                    capital_used, LEVERAGE)
+                net_pnl_now = pnl_data["net_pnl"]
+
+                # TP / SL Check
+                hit_tp = (
+                    (position == "BUY" and
+                     cur_price >= tp_price) or
+                    (position == "SELL" and
+                     cur_price <= tp_price))
+
+                hit_sl = (
+                    (position == "BUY" and
+                     cur_price <= sl_price) or
+                    (position == "SELL" and
+                     cur_price >= sl_price))
+
                 hit_max = held >= MAX_HOLD
 
                 if hit_tp or hit_sl or hit_max:
-                    label = "TP ✅" if hit_tp else ("SL ❌" if hit_sl else "MAX HOLD ⏰")
-                    icon = "🟢" if net_pnl>=0 else "🔴"
-                    capital += net_pnl
+                    # Final PnL calculate karo
+                    final_pnl = calc_net_pnl(
+                        position, entry_price,
+                        cur_price, pos_size,
+                        capital_used, LEVERAGE)
+
+                    gross_pnl = final_pnl["gross_pnl"]
+                    total_fee = final_pnl["total_fee"]
+                    net_pnl   = final_pnl["net_pnl"]
+
+                    if hit_tp:
+                        label = "TAKE PROFIT ✅"
+                        icon  = "🟢"
+                    elif hit_sl:
+                        label = "STOP LOSS ❌"
+                        icon  = "🔴"
+                    else:
+                        label = "MAX HOLD ⏰"
+                        icon  = (
+                            "🟢"
+                            if net_pnl >= 0
+                            else "🔴")
+
+                    # Capital update (net PnL)
+                    capital  += net_pnl
+                    duration  = f"{held:.1f}s"
+                    trade_count += 1
+
                     save_capital(capital)
-                    save_trade(position, entry_price, cur_price, net_pnl, capital, f"{held:.1f}s", label, fee_used)
+                    save_trade(
+                        position,
+                        entry_price,
+                        cur_price,
+                        gross_pnl,
+                        net_pnl,
+                        total_fee,
+                        capital,
+                        duration,
+                        label)
 
-                    if net_pnl > 0: consecutive_losses = 0; cd = COOLDOWN_WIN
-                    else: consecutive_losses += 1; cd = COOLDOWN_2LOSS if consecutive_losses>=2 else COOLDOWN_LOSS
+                    # Fee stats save karo
+                    save_fee_stats(final_pnl)
 
-                    print(f"[CLOSED] {label} | PnL={net_pnl:+.4f} | Fee={fee_used:.4f} | Cap={capital:.2f}")
-                    send_telegram(f"{icon} {label}\nSide: {position} | Entry: {entry_price:.4f} | Exit: {cur_price:.4f}\nNet PnL: {net_pnl:+.4f} | Fee Deducted: {fee_used:.4f}\nCapital: {capital:.4f}")
+                    if net_pnl > 0:
+                        consecutive_losses = 0
+                        cd = COOLDOWN_WIN
+                    else:
+                        consecutive_losses += 1
+                        cd = (
+                            COOLDOWN_2LOSS
+                            if consecutive_losses >= 2
+                            else COOLDOWN_LOSS)
 
-                    position = None; entry_price = 0.0; entry_time = None; pos_size = 0.0
-                    sl_price = 0.0; tp_price = 0.0; capital_used = 0.0
-                    cooldown_end = time.time() + cd; save_cooldown(cooldown_end)
-                    update_state(position=None, capital=capital, capital_used=0.0)
-                    time.sleep(SCAN_INTERVAL); continue
+                    print(
+                        f"[CLOSED #{trade_count}] "
+                        f"{label} | "
+                        f"Gross={gross_pnl:+.4f} | "
+                        f"Fee=-{total_fee:.4f} | "
+                        f"Net={net_pnl:+.4f} | "
+                        f"Cap={capital:.4f}")
 
-            # ── COOLDOWN ───────────────────────────────────────
-            if cooldown_end and time.time() < cooldown_end:
-                time.sleep(SCAN_INTERVAL); continue
+                    send_telegram(
+                        f"{icon} {label}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Trade #  : {trade_count}\n"
+                        f"Symbol   : ETH\n"
+                        f"Side     : {position}\n"
+                        f"Entry    : "
+                        f"{entry_price:.4f}\n"
+                        f"Exit     : "
+                        f"{cur_price:.4f}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Gross PnL: "
+                        f"{gross_pnl:+.4f} USDT\n"
+                        f"MEXC Fee : "
+                        f"-{total_fee:.4f} USDT\n"
+                        f"Net PnL  : "
+                        f"{net_pnl:+.4f} USDT\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Capital  : "
+                        f"{capital:.4f} USDT\n"
+                        f"Time Held: {duration}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━"
+                    )
 
-            # ── ENTRY ──────────────────────────────────────────
-            if not position and final_sig in ["BUY", "SELL"]:
-                if spread > MAX_SPREAD: time.sleep(SCAN_INTERVAL); continue
-                
-                capital_used = capital * (CAPITAL_USE / 100)
-                pos_size = (capital_used * LEVERAGE) / cur_price
-                entry_price = cur_price; entry_time = datetime.now()
-                position = final_sig; cooldown_end = None
+                    # Reset
+                    position     = None
+                    entry_price  = 0.0
+                    entry_time   = None
+                    pos_size     = 0.0
+                    sl_price     = 0.0
+                    tp_price     = 0.0
+                    capital_used = 0.0
+                    cooldown_end = (
+                        time.time() + cd)
+                    save_cooldown(cooldown_end)
+                    update_state(
+                        position=None,
+                        capital_used=0.0,
+                        capital=capital)
 
-                tp_price = entry_price * (1 + TP_PCT/100) if position=="BUY" else entry_price * (1 - TP_PCT/100)
-                sl_price = entry_price * (1 - SL_PCT/100) if position=="BUY" else entry_price * (1 + SL_PCT/100)
+                    # Speed ke liye minimal sleep
+                    elapsed = time.time() - loop_start
+                    sleep_t = max(
+                        0,
+                        SCAN_INTERVAL - elapsed)
+                    time.sleep(sleep_t)
+                    continue
 
-                net_win, fee_win = calculate_pnl_with_fees(position, entry_price, tp_price, pos_size)
-                net_loss, fee_loss = calculate_pnl_with_fees(position, entry_price, sl_price, pos_size)
+            # ══════════════════════════════
+            #  COOLDOWN CHECK
+            # ══════════════════════════════
+            if (cooldown_end is not None and
+                    time.time() < cooldown_end):
+                elapsed = time.time() - loop_start
+                sleep_t = max(
+                    0, SCAN_INTERVAL - elapsed)
+                time.sleep(sleep_t)
+                continue
 
-                print(f"[OPENED] {position} @ {entry_price:.4f} | TP:{tp_price:.4f} | SL:{sl_price:.4f}")
-                send_telegram(f"🚀 ENTRY\nSide: {position}\nEntry: {entry_price:.4f} | TP: {tp_price:.4f} | SL: {sl_price:.4f}\nSize: {pos_size:.4f} ETH\nExp Net Win: {net_win:+.4f} | Exp Net Loss: {net_loss:+.4f}\nFee: {fee_win:.4f}")
+            # ══════════════════════════════
+            #  ENTRY LOGIC
+            # ══════════════════════════════
+            if position is None:
+                if final_signal in ["BUY", "SELL"]:
+
+                    if spread > MAX_SPREAD:
+                        elapsed = (
+                            time.time() - loop_start)
+                        time.sleep(max(
+                            0,
+                            SCAN_INTERVAL - elapsed))
+                        continue
+
+                    # Capital calculation
+                    capital_used = (
+                        capital * CAPITAL_USE / 100)
+
+                    # Position size
+                    pos_size = (
+                        (capital_used * LEVERAGE) /
+                        cur_price)
+
+                    entry_price  = cur_price
+                    entry_time   = datetime.now()
+                    position     = final_signal
+                    cooldown_end = None
+
+                    # TP / SL
+                    if final_signal == "BUY":
+                        tp_price = entry_price * (
+                            1 + TP_PCT / 100)
+                        sl_price = entry_price * (
+                            1 - SL_PCT / 100)
+                    else:
+                        tp_price = entry_price * (
+                            1 - TP_PCT / 100)
+                        sl_price = entry_price * (
+                            1 + SL_PCT / 100)
+
+                    # Fee calculate karo
+                    fees = calculate_mexc_fee(
+                        capital_used, LEVERAGE)
+
+                    # Net expected PnL (after fee)
+                    exp_gross_win = round(
+                        capital_used * LEVERAGE *
+                        TP_PCT / 100, 4)
+                    exp_net_win = round(
+                        exp_gross_win -
+                        fees["total_fee"], 4)
+
+                    exp_gross_loss = round(
+                        capital_used * LEVERAGE *
+                        SL_PCT / 100, 4)
+                    exp_net_loss = round(
+                        exp_gross_loss +
+                        fees["total_fee"], 4)
+
+                    print(
+                        f"[#{trade_count+1}] "
+                        f"ENTRY {position} | "
+                        f"Price={entry_price:.4f} | "
+                        f"Fee={fees['total_fee']:.4f} | "
+                        f"ExpNet={exp_net_win:+.4f}")
+
+                    send_telegram(
+                        f"🚀 ENTRY #{trade_count+1}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Symbol   : ETH\n"
+                        f"Side     : {position}\n"
+                        f"Entry    : "
+                        f"{entry_price:.4f}\n"
+                        f"TP       : "
+                        f"{tp_price:.4f}\n"
+                        f"SL       : "
+                        f"{sl_price:.4f}\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Capital  : "
+                        f"{capital_used:.2f} USDT\n"
+                        f"Leverage : {LEVERAGE}x\n"
+                        f"Exposure : "
+                        f"{fees['exposure']:.2f} USDT\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"MEXC Fee :\n"
+                        f"Entry Fee: "
+                        f"-{fees['entry_fee']:.4f} USDT\n"
+                        f"Exit Fee : "
+                        f"-{fees['exit_fee']:.4f} USDT\n"
+                        f"Total Fee: "
+                        f"-{fees['total_fee']:.4f} USDT\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Exp Win  : "
+                        f"+{exp_net_win} USDT (net)\n"
+                        f"Exp Loss : "
+                        f"-{exp_net_loss} USDT (net)\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"OB       : {ob_signal}\n"
+                        f"Flow     : {flow_signal}\n"
+                        f"Velocity : {vel_signal}\n"
+                        f"Strength : {strength}/3\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━"
+                    )
+
+                else:
+                    # FLAT - koi print na karo
+                    # (speed ke liye)
+                    pass
+
+            # ─────────────────────────────
+            #  Speed control
+            #  Remaining time tak wait karo
+            # ─────────────────────────────
+            elapsed = time.time() - loop_start
+            sleep_t = max(0, SCAN_INTERVAL - elapsed)
+            if sleep_t > 0:
+                time.sleep(sleep_t)
 
         except Exception as e:
-            print(f"[ENGINE ERROR] {e}")
-            if "429" in str(e): time.sleep(5)
-            elif "connection" in str(e).lower(): ex = get_exchange(); time.sleep(2)
-            else: time.sleep(1)
-        time.sleep(SCAN_INTERVAL)
+            err = str(e)
+            print(f"[ENGINE ERROR] {err}")
+            if "429" in err:
+                time.sleep(5)
+            elif ("connection" in err.lower() or
+                  "timeout" in err.lower()):
+                ex = get_exchange()
+                time.sleep(2)
+            else:
+                time.sleep(0.5)
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  START
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-if __name__ == "__main__":
-    cap_use = CAPITAL * CAPITAL_USE / 100
-    exposure = cap_use * LEVERAGE
-    print("="*50)
-    print("  ETH HF SCALPING BOT v3.1")
-    print("  Capital: 10000 USDT | MXC Fees Added")
-    print(f"  Exposure: {exposure:.2f} USDT | Scan: {SCAN_INTERVAL}s")
-    print("="*50)
 
-    threads = [threading.Thread(target=run_server, daemon=True),
-               threading.Thread(target=run_periodic_update, daemon=True),
-               threading.Thread(target=run_daily_report, daemon=True),
-               threading.Thread(target=run_trading_engine, name="Engine", daemon=True)]
-    for t in threads: t.start(); time.sleep(0.2)
-    print("[INFO] All threads started ✅")
-    while True: time.sleep(60)
+if __name__ == "__main__":
+
+    cap_use    = CAPITAL * CAPITAL_USE / 100
+    fees_ex    = calculate_mexc_fee(
+        cap_use, LEVERAGE)
+    exposure   = fees_ex["exposure"]
+    entry_fee  = fees_ex["entry_fee"]
+    exit_fee   = fees_ex["exit_fee"]
+    total_fee  = fees_ex["total_fee"]
+
+    exp_gross_win  = round(
+        exposure * TP_PCT / 100, 4)
+    exp_net_win    = round(
+        exp_gross_win - total_fee, 4)
+
+    exp_gross_loss = round(
+        exposure * SL_PCT / 100, 4)
+    exp_net_loss   = round(
+        exp_gross_loss + total_fee, 4)
+
+    # Trades per day estimate
+    trades_per_day = int(
+        86400 / (SCAN_INTERVAL + 0.02))
+
+    print("=" * 55)
+    print("  ETH HF SCALPING BOT v3.0 — MEXC")
+    print("  Order Book + Flow + Velocity")
+    print("=" * 55)
+    print(f"  Symbol     : ETH/USDT")
+    print(f"  Exchange   : MEXC Futures")
+    print(f"  Capital    : {CAPITAL} USDT")
+    print(f"  Use        : {cap_use} USDT (90%)")
+    print(f"  Leverage   : {LEVERAGE}x")
+    print(f"  Exposure   : {exposure} USDT")
+    print(f"  TP         : {TP_PCT}%")
+    print(f"  SL         : {SL_PCT}%")
+    print(f"  Max Hold   : {MAX_HOLD}s")
+    print(f"  Scan Speed : "
+          f"{SCAN_INTERVAL*1000:.0f}ms")
+    print(f"  Est Trades : ~{trades_per_day:,}/day")
+    print("-" * 55)
+    print(f"  MEXC FEE BREAKDOWN:")
+    print(f"  Maker Fee  : 0.02%")
+    print(f"  Taker Fee  : 0.06% (used)")
+    print(f"  Entry Fee  : {entry_fee} USDT")
+    print(f"  Exit Fee   : {exit_fee} USDT")
+    print(f"  Total/Trade: {total_fee} USDT")
+    print("-" * 55)
+    print(f"  Gross Win  : +{exp_gross_win} USDT")
+    print(f"  Net Win    : +{exp_net_win} USDT")
+    print(f"  Gross Loss : -{exp_gross_loss} USDT")
+    print(f"  Net Loss   : -{exp_net_loss} USDT")
+    print("=" * 55)
+
+    threads = [
+        threading.Thread(
+            target=run_server,
+            name="Flask",
+            daemon=True),
+        threading.Thread(
+            target=telegram_worker,
+            name="Telegram",
+            daemon=True),
+        threading.Thread(
+            target=run_periodic_update,
+            name="Update",
+            daemon=True),
+        threading.Thread(
+            target=run_daily_report,
+            name="Daily",
+            daemon=True),
+        threading.Thread(
+            target=run_trading_engine,
+            name="Engine",
+            daemon=True),
+    ]
+
+    for t in threads:
+        t.start()
+        time.sleep(0.3)
+
+    print(
+        f"\n[INFO] Threads  : {len(threads)}")
+    print(
+        f"[INFO] Scan     : "
+        f"{SCAN_INTERVAL*1000:.0f}ms")
+    print(
+        f"[INFO] Est/Day  : "
+        f"~{trades_per_day:,} trades")
+    print("[INFO] Bot Running 24/7 ✅")
+    print("=" * 55)
+
+    while True:
+        time.sleep(60)
