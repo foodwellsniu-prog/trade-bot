@@ -1,20 +1,11 @@
 """
-ETH/USDT Market Making Bot
+ETH Trading Bot
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Exchange : Binance Futures Testnet
-Symbol   : ETH/USDT
-Strategy : Market Making
-Fee      : 0.02% Maker (Testnet)
+Sirf YE choose karo:
+MODE = "TESTNET"  → Demo trading
+MODE = "REAL"     → Real trading
 
-HOW IT WORKS:
-ETH Price = 1670 USDT
-Bot lagata hai:
-BUY  Limit @ 1669.95
-SELL Limit @ 1670.05
-
-Jab dono fill ho:
-Profit = 0.10 USDT
-Fee    = 0% (Maker)
+Bas ek line change karo!
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
@@ -33,7 +24,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "ETH MM Bot - Binance Testnet ✅"
+    return "ETH Bot Running ✅"
 
 def run_server():
     port = int(
@@ -42,110 +33,112 @@ def run_server():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ⚙️ CONFIG - SIRF YE BHARO
+#  ⚙️ MAIN CONFIG
+#  SIRF YAHAN CHANGES KARO
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# 🔑 Apni Testnet API Key yahan daalo
-API_KEY    = "H647cSQelN9Im9o22wTu3h3oz3ZTBgxSzV5McQzN7qJoWg94lPGmR6JaCawbmS5S "
-API_SECRET = "O2Gz79sooHsYAzd2oyJQ2rmE8KwhhF5JCs9KlwHwFToTitszOaLMRDFYCobz6gSW"
+# ✅ MODE CHOOSE KARO:
+# "TESTNET" = Demo trading (safe)
+# "REAL"    = Real money trading
+MODE = "TESTNET"
 
-# 📱 Telegram
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# TESTNET API KEYS
+# testnet.binancefuture.com se lo
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TESTNET_API_KEY    = "H647cSQelN9Im9o22wTu3h3oz3ZTBgxSzV5McQzN7qJoWg94lPGmR6JaCawbmS5S"
+TESTNET_API_SECRET = "O2Gz79sooHsYAzd2oyJQ2rmE8KwhhF5JCs9KlwHwFToTitszOaLMRDFYCobz6gSW"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# REAL API KEYS
+# binance.com se lo (baad mein)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+REAL_API_KEY    = "REAL_KEY_YAHAN"
+REAL_API_SECRET = "REAL_SECRET_YAHAN"
+
+# Telegram
 BOT_TOKEN = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
 CHAT_ID   = "7102976298"
 
-# 💰 Symbol
-SYMBOL    = "ETH/USDT"
+# Symbol
+SYMBOL = "ETH/USDT"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📊 TRADING CONFIG
+#  TRADING CONFIG
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-# Leverage
 LEVERAGE     = 5
+CAPITAL_USE  = 80     # 80% use karo
+TP_PCT       = 0.15   # 0.15% TP
+SL_PCT       = 0.08   # 0.08% SL
 
-# Capital use karo (%)
-CAPITAL_USE  = 80      # 80%
-
-# ── Spread ────────────────────────────────
-# Kitna spread capture karna hai
-# ETH 1670 pe:
-# HALF = 0.05 matlab
-# BUY  @ 1669.95
-# SELL @ 1670.05
-# Profit = 0.10 USDT per pair
-HALF_SPREAD  = 0.05    # 5 cents each side
-
-# ── Order Refresh ─────────────────────────
-# Har kitne second mein
-# orders refresh kare
-REFRESH_TIME = 1.0     # 1 second
-
-# ── Inventory Limits ──────────────────────
-# Max kitna ETH hold kar sakte hain
-MAX_INV      = 2.0     # 2 ETH max
-
-# Itna ho jaye to hedge karo
-HEDGE_INV    = 1.5     # 1.5 ETH
-
-# Inventory loss limit
-INV_SL       = -50.0   # -50 USDT
-
-# ── Fee (Binance Testnet) ─────────────────
-MAKER_FEE    = 0.0002  # 0.02%
+# Fees
 TAKER_FEE    = 0.0004  # 0.04%
 
-# ── Update ────────────────────────────────
-UPDATE_MIN   = 30      # 30 min update
+# Speed
+SCAN_SEC     = 2       # Har 2 second
 
+# Cooldown
+CD_WIN       = 1       # 1s win ke baad
+CD_LOSS      = 3       # 3s loss ke baad
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📁 FILES
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Update
+UPDATE_MIN   = 30      # 30 min
 
+# Files
 FILES = {
-    "capital": "capital_mm.txt",
-    "history": "history_mm.json",
+    "capital": "capital_bot.txt",
+    "history": "history_bot.json",
 }
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  🧠 STATE
+#  AUTO CONFIG
+#  Mode ke hisab se automatic set hoga
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+if MODE == "TESTNET":
+    API_KEY    = TESTNET_API_KEY
+    API_SECRET = TESTNET_API_SECRET
+    IS_TESTNET = True
+    MODE_NAME  = "🔵 TESTNET (Demo)"
+    print("=" * 40)
+    print("  MODE: TESTNET (DEMO)")
+    print("  Fake money - Safe!")
+    print("=" * 40)
+else:
+    API_KEY    = REAL_API_KEY
+    API_SECRET = REAL_API_SECRET
+    IS_TESTNET = False
+    MODE_NAME  = "🔴 REAL TRADING"
+    print("=" * 40)
+    print("  MODE: REAL TRADING")
+    print("  REAL MONEY!")
+    print("=" * 40)
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  STATE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 lock  = threading.Lock()
 state = {
-    # Market
-    "price":       0.0,
-    "bid":         0.0,
-    "ask":         0.0,
-    "spread":      0.0,
-
-    # Our Orders
-    "buy_id":      None,
-    "sell_id":     None,
-    "our_bid":     0.0,
-    "our_ask":     0.0,
-
-    # Inventory
-    "inventory":   0.0,
-    "avg_price":   0.0,
-    "inv_pnl":     0.0,
-
-    # Capital
-    "capital":     0.0,
-    "start_cap":   0.0,
-
-    # Stats
-    "trades":      0,
-    "buy_fills":   0,
-    "sell_fills":  0,
-    "gross":       0.0,
-    "hedge_cost":  0.0,
-    "net":         0.0,
-    "best":        0.0,
-    "cycles":      0,
-    "wins":        0,
-    "losses":      0,
+    "price":     0.0,
+    "position":  None,
+    "entry":     0.0,
+    "tp":        0.0,
+    "sl":        0.0,
+    "qty":       0.0,
+    "cap_used":  0.0,
+    "capital":   0.0,
+    "start_cap": 0.0,
+    "trades":    0,
+    "wins":      0,
+    "losses":    0,
+    "net":       0.0,
+    "best":      0.0,
+    "worst":     0.0,
+    "cycles":    0,
+    "mode":      MODE_NAME,
 }
 
 def set_state(**kw):
@@ -160,7 +153,7 @@ def get_state():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  💾 CAPITAL
+#  CAPITAL MANAGER
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def load_cap():
@@ -168,9 +161,15 @@ def load_cap():
         with open(
                 FILES["capital"],
                 "r") as f:
-            return float(f.read().strip())
+            cap = float(f.read().strip())
+            if cap > 0:
+                print(
+                    f"[CAP] Loaded: "
+                    f"{cap:.2f} USDT")
+                return cap
     except Exception:
-        return None
+        pass
+    return None
 
 def save_cap(cap):
     try:
@@ -183,14 +182,15 @@ def save_cap(cap):
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📝 HISTORY
+#  HISTORY
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 hist_lock = threading.Lock()
 
 def save_trade(
-        ttype, price, qty,
-        profit, cap, num):
+        side, entry, exit_p,
+        gross, fee, net_pnl,
+        capital, dur, label, num):
     try:
         with hist_lock:
             try:
@@ -208,14 +208,21 @@ def save_trade(
                     .strftime("%d/%m/%Y"),
                 "time":    datetime.now()
                     .strftime("%H:%M:%S"),
-                "type":    ttype,
-                "price":   round(price, 2),
-                "qty":     round(qty, 4),
-                "profit":  round(profit, 4),
-                "capital": round(cap, 4),
+                "mode":    MODE,
+                "side":    side,
+                "entry":   round(entry, 2),
+                "exit":    round(exit_p, 2),
+                "gross":   round(gross, 4),
+                "fee":     round(fee, 4),
+                "net":     round(net_pnl, 4),
+                "capital": round(capital, 4),
+                "dur":     dur,
+                "result":  (
+                    "WIN" if net_pnl > 0
+                    else "LOSS"),
+                "label":   label,
             })
 
-            # Last 50000 rakho
             if len(h) > 50000:
                 h = h[-50000:]
 
@@ -228,7 +235,7 @@ def save_trade(
         print(f"[HIST] {e}")
 
 
-def get_today_stats():
+def get_today():
     try:
         with open(
                 FILES["history"],
@@ -238,115 +245,187 @@ def get_today_stats():
     except Exception:
         return None
 
-    today  = datetime.now().strftime(
+    today = datetime.now().strftime(
         "%d/%m/%Y")
-    today_trades = [
-        t for t in h
-        if t["date"] == today]
+    t = [
+        x for x in h
+        if x["date"] == today]
 
-    if not today_trades:
+    if not t:
         return None
 
-    buys   = [
-        t for t in today_trades
-        if t["type"] == "BUY"]
-    sells  = [
-        t for t in today_trades
-        if t["type"] == "SELL"]
-    hedges = [
-        t for t in today_trades
-        if t["type"] == "HEDGE"]
-
-    sell_profits = [
-        t["profit"] for t in sells]
-
-    net = round(sum(
-        t["profit"]
-        for t in today_trades), 4)
-
-    vol = round(sum(
-        t["price"] * t["qty"]
-        for t in today_trades), 2)
-
+    nets   = [x["net"] for x in t]
+    fees   = [x["fee"] for x in t]
+    wins   = len([
+        x for x in t
+        if x["result"] == "WIN"])
+    losses = len(t) - wins
     hours  = max(1, len(set(
-        t["time"][:2]
-        for t in today_trades)))
+        x["time"][:2] for x in t)))
 
     return {
-        "total":   len(today_trades),
-        "buys":    len(buys),
-        "sells":   len(sells),
-        "hedges":  len(hedges),
-        "net":     net,
-        "volume":  vol,
-        "per_hr":  round(net/hours, 4),
-        "best":    round(
-            max(sell_profits)
-            if sell_profits else 0, 4),
-        "worst":   round(
-            min(sell_profits)
-            if sell_profits else 0, 4),
-        "wins":    len([
-            p for p in sell_profits
-            if p > 0]),
-        "losses":  len([
-            p for p in sell_profits
-            if p <= 0]),
-        "capital": today_trades[
-            -1]["capital"],
+        "total":   len(t),
+        "wins":    wins,
+        "losses":  losses,
+        "wr":      round(
+            wins/len(t)*100, 1),
+        "net":     round(sum(nets), 4),
+        "fees":    round(sum(fees), 4),
+        "best":    round(max(nets), 4),
+        "worst":   round(min(nets), 4),
+        "per_hr":  round(
+            sum(nets)/hours, 4),
+        "capital": t[-1]["capital"],
     }
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  🔌 EXCHANGE - BINANCE TESTNET
+#  EXCHANGE
+#  Testnet ya Real - Auto decide
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def get_exchange():
-    """
-    Binance Futures Testnet
-    Real orders place hote hain
-    Fake money se!
-    """
     while True:
         try:
-            ex = ccxt.binanceusdm({
-                "apiKey":  API_KEY,
-                "secret":  API_SECRET,
-                "enableRateLimit": True,
-                "rateLimit": 50,
-                "options": {
-                    "defaultType":
-                        "future",
-                    # ✅ TESTNET
-                    "sandboxMode": True,
-                },
-            })
+            if IS_TESTNET:
+                # ✅ TESTNET
+                ex = ccxt.binanceusdm({
+                    "apiKey":  API_KEY,
+                    "secret":  API_SECRET,
+                    "enableRateLimit":
+                        True,
+                    "rateLimit": 100,
+                    "options": {
+                        "defaultType":
+                            "future",
+                        "sandboxMode":
+                            True,
+                    },
+                })
+                ex.set_sandbox_mode(True)
+                print(
+                    "[EXCHANGE] "
+                    "Testnet ✅")
+            else:
+                # ✅ REAL
+                ex = ccxt.binanceusdm({
+                    "apiKey":  API_KEY,
+                    "secret":  API_SECRET,
+                    "enableRateLimit":
+                        True,
+                    "rateLimit": 50,
+                    "options": {
+                        "defaultType":
+                            "future",
+                    },
+                })
+                print(
+                    "[EXCHANGE] "
+                    "REAL Binance ✅")
 
-            # Testnet URL set karo
-            ex.set_sandbox_mode(True)
             ex.load_markets()
 
-            # Leverage set karo
             try:
                 ex.set_leverage(
                     LEVERAGE, SYMBOL)
-            except Exception:
-                pass
+                print(
+                    f"[LEVERAGE] "
+                    f"{LEVERAGE}x set ✅")
+            except Exception as e:
+                print(
+                    f"[LEVERAGE] {e}")
 
-            print(
-                "[BINANCE TESTNET] "
-                "Connected ✅")
             return ex
 
         except Exception as e:
             print(
-                f"[RECONNECT] "
-                f"{e} - 15s...")
+                f"[CONN ERR] {e}\n"
+                f"15s mein retry...")
             time.sleep(15)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📬 TELEGRAM
+#  BALANCE FETCH - FIXED!
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def get_balance(ex):
+    """
+    ✅ FIXED Balance Fetch
+
+    Testnet aur Real dono ke liye
+    Sahi balance fetch karega
+    """
+    try:
+        bal = ex.fetch_balance()
+
+        # Method 1: Normal way
+        try:
+            usdt = float(
+                bal["USDT"]["free"] or 0)
+            if usdt > 0:
+                print(
+                    f"[BAL M1] "
+                    f"{usdt:.2f} USDT")
+                return usdt
+        except Exception:
+            pass
+
+        # Method 2: Total way
+        try:
+            usdt = float(
+                bal["total"].get(
+                    "USDT", 0) or 0)
+            if usdt > 0:
+                print(
+                    f"[BAL M2] "
+                    f"{usdt:.2f} USDT")
+                return usdt
+        except Exception:
+            pass
+
+        # Method 3: Info way
+        try:
+            info   = bal.get("info", {})
+            assets = info.get(
+                "assets", [])
+            for a in assets:
+                if a.get(
+                        "asset") == "USDT":
+                    usdt = float(
+                        a.get(
+                            "availableBalance",
+                            0) or 0)
+                    if usdt > 0:
+                        print(
+                            f"[BAL M3] "
+                            f"{usdt:.2f} USDT")
+                        return usdt
+        except Exception:
+            pass
+
+        # Method 4: Free dict
+        try:
+            free = bal.get("free", {})
+            usdt = float(
+                free.get("USDT", 0) or 0)
+            if usdt > 0:
+                print(
+                    f"[BAL M4] "
+                    f"{usdt:.2f} USDT")
+                return usdt
+        except Exception:
+            pass
+
+        print("[BAL] Koi method kaam nahi kiya")
+        return 0.0
+
+    except Exception as e:
+        print(f"[BAL ERR] {e}")
+        return 0.0
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  TELEGRAM
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 tg_q    = []
@@ -375,7 +454,7 @@ def tg_worker():
                                 "chat_id":
                                     CHAT_ID,
                                 "text":
-                                    f"🤖 MM BOT\n"
+                                    f"🤖 ETH BOT\n"
                                     f"{msg}",
                             },
                             timeout=10)
@@ -390,104 +469,68 @@ def tg_worker():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📊 ORDER FUNCTIONS
+#  SIGNAL
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def place_buy(ex, price, qty):
-    """
-    BUY Limit Order Place karo
-    postOnly = Maker = 0% fee
-    """
+price_hist = deque(maxlen=20)
+
+def get_signal(price):
+    price_hist.append(price)
+    if len(price_hist) < 6:
+        return "WAIT"
+
+    prices = list(price_hist)
+    recent = prices[-3:]
+    older  = prices[-6:-3]
+
+    r_avg = sum(recent) / len(recent)
+    o_avg = sum(older)  / len(older)
+
+    change = (
+        (r_avg - o_avg) /
+        o_avg * 100)
+
+    if change > 0.02:
+        return "BUY"
+    elif change < -0.02:
+        return "SELL"
+    else:
+        return "WAIT"
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  ORDERS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def open_trade(ex, side, price, qty):
     try:
-        o = ex.create_limit_buy_order(
-            SYMBOL, qty, price,
-            {"timeInForce": "GTX"})
-        print(
-            f"[BUY ORDER] "
-            f"{qty}@{price} "
-            f"ID:{o['id']}")
-        return o["id"]
-    except Exception as e:
-        print(f"[BUY ERR] {e}")
-        return None
-
-
-def place_sell(ex, price, qty):
-    """
-    SELL Limit Order Place karo
-    postOnly = Maker = 0% fee
-    """
-    try:
-        o = ex.create_limit_sell_order(
-            SYMBOL, qty, price,
-            {"timeInForce": "GTX"})
-        print(
-            f"[SELL ORDER] "
-            f"{qty}@{price} "
-            f"ID:{o['id']}")
-        return o["id"]
-    except Exception as e:
-        print(f"[SELL ERR] {e}")
-        return None
-
-
-def cancel(ex, order_id):
-    """Order cancel karo"""
-    try:
-        if order_id:
-            ex.cancel_order(
-                order_id, SYMBOL)
-            return True
-    except Exception as e:
-        if "unknown" not in str(e).lower():
-            print(f"[CANCEL] {e}")
-    return False
-
-
-def get_order_status(ex, order_id):
-    """
-    Order ka status check karo
-
-    Return:
-    status  = filled/open/cancelled
-    filled  = kitna fill hua
-    price   = kis price pe fill hua
-    """
-    try:
-        if not order_id:
-            return "none", 0.0, 0.0
-
-        o      = ex.fetch_order(
-            order_id, SYMBOL)
-        status = o["status"]
-        filled = float(
-            o.get("filled", 0))
-        price  = float(
-            o.get("average") or
-            o.get("price") or 0)
-
-        if status == "closed":
-            return "filled", filled, price
-        elif status == "canceled":
-            return "cancelled", 0.0, 0.0
-        elif filled > 0:
-            return "partial", filled, price
+        if side == "BUY":
+            o = ex.create_market_buy_order(
+                SYMBOL, qty)
         else:
-            return "open", 0.0, 0.0
+            o = ex.create_market_sell_order(
+                SYMBOL, qty)
+
+        fill = float(
+            o.get("average") or
+            o.get("price") or price)
+        fee  = fill * qty * TAKER_FEE
+
+        return fill, fee
 
     except Exception as e:
-        print(f"[STATUS] {e}")
-        return "error", 0.0, 0.0
+        print(f"[OPEN] {e}")
+        return None, 0
 
 
-def market_close(ex, side, qty):
-    """
-    Market order se close karo
-    Hedge ke liye
-    Taker fee lagegi
-    """
+def close_trade(ex, side, qty):
     try:
-        if side == "sell":
+        close = (
+            "sell"
+            if side == "BUY"
+            else "buy")
+
+        if close == "sell":
             o = ex.create_market_sell_order(
                 SYMBOL, qty,
                 {"reduceOnly": True})
@@ -496,36 +539,20 @@ def market_close(ex, side, qty):
                 SYMBOL, qty,
                 {"reduceOnly": True})
 
-        price = float(
+        fill = float(
             o.get("average") or
             o.get("price") or 0)
-        fee   = price * qty * TAKER_FEE
+        fee  = fill * qty * TAKER_FEE
 
-        print(
-            f"[HEDGE] {side} "
-            f"{qty}@{price:.2f} "
-            f"fee={fee:.4f}")
-        return price, fee
+        return fill, fee
 
     except Exception as e:
-        print(f"[HEDGE ERR] {e}")
-        return 0.0, 0.0
-
-
-def get_account_balance(ex):
-    """Testnet balance dekho"""
-    try:
-        bal = ex.fetch_balance()
-        usdt = float(
-            bal["USDT"]["free"] or 0)
-        return usdt
-    except Exception as e:
-        print(f"[BAL] {e}")
-        return 0.0
+        print(f"[CLOSE] {e}")
+        return None, 0
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📢 UPDATE MESSAGE
+#  UPDATE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_update():
@@ -533,94 +560,93 @@ def run_update():
     while True:
         try:
             st    = get_state()
-            stats = get_today_stats()
+            today = get_today()
             now   = datetime.now()\
-                .strftime("%Y-%m-%d %H:%M")
+                .strftime(
+                    "%Y-%m-%d %H:%M")
 
             cap   = st["capital"]
             scap  = st["start_cap"]
             net   = st["net"]
-            bf    = st["buy_fills"]
-            sf    = st["sell_fills"]
             tc    = st["trades"]
-            inv   = st["inventory"]
-            price = st["price"]
-            ipl   = st["inv_pnl"]
-            cyc   = st["cycles"]
             wins  = st["wins"]
             losses= st["losses"]
-            growth= round(cap - scap, 4)
+            price = st["price"]
+            pos   = st["position"]
+            cyc   = st["cycles"]
+            growth= round(cap-scap, 4)
             growp = round(
-                growth / max(1, scap)
-                * 100, 2)
+                growth /
+                max(1, scap) * 100, 2)
             wr    = round(
                 wins /
-                max(1, wins + losses)
+                max(1, wins+losses)
                 * 100, 1)
+
+            if pos:
+                entry = st["entry"]
+                pnl_now = (
+                    (price - entry) *
+                    st["qty"]
+                    if pos == "BUY"
+                    else
+                    (entry - price) *
+                    st["qty"])
+                icon = (
+                    "🟢" if pnl_now >= 0
+                    else "🔴")
+                pos_txt = (
+                    f"{icon} {pos}\n"
+                    f"Entry  : {entry:.2f}\n"
+                    f"Now    : {price:.2f}\n"
+                    f"TP     : {st['tp']:.2f}\n"
+                    f"SL     : {st['sl']:.2f}\n"
+                    f"PnL Now: "
+                    f"{pnl_now:+.4f}\n")
+            else:
+                pos_txt = (
+                    f"⏳ WAIT\n"
+                    f"Price  : {price:.2f}\n")
 
             msg = (
                 f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"  MM BOT UPDATE\n"
+                f"  ETH BOT UPDATE\n"
                 f"  {now}\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"🔵 BINANCE TESTNET\n"
+                f"{st['mode']}\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"MARKET\n"
-                f"ETH Price: {price:.2f}\n"
-                f"Our Bid  : {st['our_bid']:.2f}\n"
-                f"Our Ask  : {st['our_ask']:.2f}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"INVENTORY\n"
-                f"ETH Held : {inv:.4f}\n"
-                f"Value    : "
-                f"{inv*price:.2f} USDT\n"
-                f"Inv PnL  : "
-                f"{ipl:+.4f} USDT\n"
+                f"POSITION\n"
+                f"{pos_txt}"
                 f"━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"STATS\n"
-                f"Cycles   : {cyc}\n"
-                f"Trades   : {tc}\n"
-                f"Buy Fill : {bf}\n"
-                f"Sell Fill: {sf}\n"
-                f"Win Rate : {wr}%\n"
-                f"Net PnL  : "
-                f"{net:+.4f} USDT\n"
+                f"Cycles : {cyc}\n"
+                f"Trades : {tc}\n"
+                f"Wins   : {wins} ✅\n"
+                f"Losses : {losses} ❌\n"
+                f"WR     : {wr}%\n"
+                f"Net    : {net:+.4f}\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━\n"
                 f"CAPITAL\n"
-                f"Start    : "
-                f"{scap:.2f} USDT\n"
-                f"Current  : "
-                f"{cap:.4f} USDT\n"
-                f"Growth   : "
-                f"{growth:+.4f} USDT\n"
-                f"ROI      : "
-                f"{growp:+.2f}%\n"
+                f"Start  : {scap:.2f}\n"
+                f"Now    : {cap:.4f}\n"
+                f"Growth : {growth:+.4f}\n"
+                f"ROI    : {growp:+.2f}%\n"
                 f"━━━━━━━━━━━━━━━━━━━━━━")
 
-            if stats:
-                ph = stats["per_hr"]
-                pd = round(ph * 24, 2)
-                pm = round(pd * 30, 2)
+            if today:
+                ph = today["per_hr"]
+                pd = round(ph*24, 2)
+                pm = round(pd*30, 2)
                 msg += (
                     f"\nTODAY\n"
-                    f"Trades   : "
-                    f"{stats['total']}\n"
-                    f"Buys     : "
-                    f"{stats['buys']}\n"
-                    f"Sells    : "
-                    f"{stats['sells']}\n"
-                    f"Wins     : "
-                    f"{stats['wins']} ✅\n"
-                    f"Losses   : "
-                    f"{stats['losses']} ❌\n"
-                    f"Net PnL  : "
-                    f"{stats['net']:+.4f}\n"
-                    f"Per Hour : "
-                    f"+{ph:.4f}\n"
-                    f"Per Day~ : "
-                    f"+{pd:.2f} USDT\n"
-                    f"Monthly~ : "
-                    f"+{pm:.2f} USDT\n"
+                    f"Trades : {today['total']}\n"
+                    f"WR     : {today['wr']}%\n"
+                    f"Fees   : -{today['fees']}\n"
+                    f"Net    : "
+                    f"{today['net']:+.4f}\n"
+                    f"Per Hr : +{ph:.4f}\n"
+                    f"Per Day: +{pd:.2f}\n"
+                    f"Monthly: +{pm:.2f}\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━")
 
             send_tg(msg)
@@ -632,7 +658,7 @@ def run_update():
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📅 DAILY REPORT
+#  DAILY
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_daily():
@@ -641,622 +667,496 @@ def run_daily():
             ist = timezone(timedelta(
                 hours=5, minutes=30))
             now = datetime.now(ist)
-
             if (now.hour == 23 and
                     now.minute == 59):
-                stats = get_today_stats()
+                today = get_today()
                 st    = get_state()
-                today = now.strftime(
+                date  = now.strftime(
                     "%d/%m/%Y")
-
-                if stats:
+                if today:
                     growth = round(
                         st["capital"] -
-                        st["start_cap"], 4)
+                        st["start_cap"],
+                        4)
                     roi    = round(
                         growth /
                         max(1,
                             st["start_cap"])
                         * 100, 2)
-                    wr     = round(
-                        stats["wins"] /
-                        max(1,
-                            stats["wins"] +
-                            stats["losses"])
-                        * 100, 1)
-                    pm     = round(
-                        stats["net"] * 30,
-                        2)
+                    pm = round(
+                        today["net"]*30, 2)
 
                     msg = (
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
                         f"  DAILY REPORT\n"
-                        f"  {today}\n"
+                        f"  {date}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Exchange : Binance\n"
-                        f"Mode     : Testnet\n"
-                        f"Strategy : Mkt Making\n"
+                        f"{st['mode']}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
                         f"TRADES\n"
-                        f"Total    : "
-                        f"{stats['total']}\n"
-                        f"Buy Fill : "
-                        f"{stats['buys']}\n"
-                        f"Sell Fill: "
-                        f"{stats['sells']}\n"
-                        f"Hedges   : "
-                        f"{stats['hedges']}\n"
-                        f"Win Rate : {wr}%\n"
-                        f"Volume   : "
-                        f"${stats['volume']:,.0f}\n"
+                        f"Total  : {today['total']}\n"
+                        f"Wins   : {today['wins']}\n"
+                        f"Losses : {today['losses']}\n"
+                        f"WR     : {today['wr']}%\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
                         f"PNL\n"
-                        f"Net PnL  : "
-                        f"{stats['net']:+.4f}\n"
-                        f"Best     : "
-                        f"+{stats['best']:.4f}\n"
-                        f"Worst    : "
-                        f"{stats['worst']:.4f}\n"
-                        f"Per Hour : "
-                        f"+{stats['per_hr']:.4f}\n"
-                        f"Monthly~ : "
-                        f"+{pm:.2f} USDT\n"
+                        f"Net    : "
+                        f"{today['net']:+.4f}\n"
+                        f"Best   : "
+                        f"+{today['best']:.4f}\n"
+                        f"Worst  : "
+                        f"{today['worst']:.4f}\n"
+                        f"Fees   : "
+                        f"-{today['fees']:.4f}\n"
+                        f"Monthly: +{pm:.2f}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
                         f"CAPITAL\n"
-                        f"Start    : "
+                        f"Start  : "
                         f"{st['start_cap']:.2f}\n"
-                        f"Now      : "
+                        f"Now    : "
                         f"{st['capital']:.4f}\n"
-                        f"Growth   : "
-                        f"{growth:+.4f}\n"
-                        f"ROI      : "
-                        f"{roi:+.2f}%\n"
+                        f"Growth : {growth:+.4f}\n"
+                        f"ROI    : {roi:+.2f}%\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━")
                 else:
                     msg = (
-                        f"DAILY {today}\n"
+                        f"DAILY {date}\n"
                         f"Koi trade nahi")
-
                 send_tg(msg)
                 time.sleep(70)
-
         except Exception as e:
             print(f"[DAY] {e}")
         time.sleep(30)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  🚀 MAIN ENGINE
+#  MAIN ENGINE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def run_engine():
-    """
-    Market Making Engine
 
-    LOOP HAR 1 SECOND:
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    1. Price fetch karo
-    2. Fill check karo
-    3. Inventory check karo
-    4. Old orders cancel karo
-    5. Naye orders lagao
-    6. Repeat!
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    ex = get_exchange()
 
-    FILL LOGIC:
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    Exchange khud fill karega
-    Jab market price hamare
-    order pe aayega
+    # ✅ FIXED: Balance fetch
+    print("[BAL] Fetching balance...")
+    balance = get_balance(ex)
 
-    Hume sirf check karna hai
-    Ki order fill hua ya nahi
-    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    """
+    # Balance mile ya na mile
+    # File se load karo
+    saved = load_cap()
 
-    ex          = get_exchange()
-    balance     = get_account_balance(ex)
-    capital     = load_cap() or balance
+    if saved and saved > 0:
+        # File mein saved capital hai
+        capital = saved
+        print(
+            f"[CAP] File se: "
+            f"{capital:.2f} USDT")
+    elif balance and balance > 0:
+        # Exchange se mila
+        capital = balance
+        print(
+            f"[CAP] Exchange se: "
+            f"{capital:.2f} USDT")
+        save_cap(capital)
+    else:
+        # Default
+        capital = 10000.0
+        print(
+            f"[CAP] Default: "
+            f"{capital:.2f} USDT")
+        save_cap(capital)
+
     start_cap   = capital
-    inventory   = 0.0
-    avg_price   = 0.0
-    buy_id      = None
-    sell_id     = None
-    buy_fills   = 0
-    sell_fills  = 0
+    position    = None
+    entry_price = 0.0
+    entry_time  = None
+    qty         = 0.0
+    tp_price    = 0.0
+    sl_price    = 0.0
+    cap_used    = 0.0
+    entry_fee   = 0.0
+    cd_end      = None
     trades      = 0
-    gross       = 0.0
-    hedge_cost  = 0.0
-    net         = 0.0
-    best        = 0.0
     wins        = 0
     losses      = 0
+    net         = 0.0
+    best        = 0.0
+    worst       = 0.0
     cycles      = 0
 
     print(
-        f"[ENGINE] Started ✅\n"
-        f"Balance: {balance:.2f} USDT\n"
-        f"Capital: {capital:.2f} USDT")
-
-    save_cap(capital)
-
-    set_state(
-        capital=capital,
-        start_cap=start_cap)
-
-    # Startup message
-    cap_use = capital * CAPITAL_USE / 100
-    exp     = cap_use * LEVERAGE
-    profit_per_pair = HALF_SPREAD * 2
+        f"\n[START] ✅\n"
+        f"Mode   : {MODE_NAME}\n"
+        f"Capital: {capital:.2f} USDT\n"
+        f"Symbol : {SYMBOL}\n"
+        f"TP     : {TP_PCT}%\n"
+        f"SL     : {SL_PCT}%\n")
 
     send_tg(
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"  MM BOT STARTED\n"
-        f"  Binance Testnet\n"
+        f"  ETH BOT STARTED\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Balance  : "
-        f"{balance:.2f} USDT\n"
-        f"Use(80%) : "
-        f"{cap_use:.2f} USDT\n"
-        f"Leverage : {LEVERAGE}x\n"
-        f"Exposure : {exp:.2f} USDT\n"
+        f"{MODE_NAME}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"STRATEGY\n"
-        f"Half Spread : "
-        f"{HALF_SPREAD} USDT\n"
-        f"Per Pair    : "
-        f"+{profit_per_pair} USDT\n"
-        f"Maker Fee   : "
-        f"{MAKER_FEE*100}%\n"
+        f"Capital : {capital:.2f} USDT\n"
+        f"Symbol  : {SYMBOL}\n"
+        f"Leverage: {LEVERAGE}x\n"
+        f"TP      : {TP_PCT}%\n"
+        f"SL      : {SL_PCT}%\n"
+        f"Scan    : {SCAN_SEC}s\n"
         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"LIMITS\n"
-        f"Max Inv  : {MAX_INV} ETH\n"
-        f"Hedge At : {HEDGE_INV} ETH\n"
-        f"Stop Loss: {INV_SL} USDT\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Bot chal raha hai!\n"
-        f"Orders place ho rahe...\n"
+        f"Bot shuru ho gaya!\n"
+        f"Trades aana shuru honge!\n"
         f"━━━━━━━━━━━━━━━━━━━━━━"
     )
 
     while True:
         try:
-            loop_start = time.time()
-            cycles    += 1
+            loop_st = time.time()
+            cycles += 1
+
+            # Price fetch
+            try:
+                ticker = ex.fetch_ticker(
+                    SYMBOL)
+                price  = float(
+                    ticker["last"])
+            except Exception:
+                time.sleep(SCAN_SEC)
+                continue
 
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # 1. PRICE FETCH
+            # POSITION MONITOR
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            ob = ex.fetch_order_book(
-                SYMBOL, limit=5)
+            if position is not None:
+                held = round(
+                    (datetime.now() -
+                     entry_time
+                     ).total_seconds(), 1)
 
-            best_bid = float(
-                ob["bids"][0][0])
-            best_ask = float(
-                ob["asks"][0][0])
-            mid      = round(
-                (best_bid + best_ask)
-                / 2, 2)
-            spread   = round(
-                best_ask - best_bid, 4)
+                hit_tp = (
+                    (position == "BUY"
+                     and price >= tp_price)
+                    or
+                    (position == "SELL"
+                     and price <= tp_price))
 
-            # Hamare orders
-            our_bid = round(
-                mid - HALF_SPREAD, 2)
-            our_ask = round(
-                mid + HALF_SPREAD, 2)
+                hit_sl = (
+                    (position == "BUY"
+                     and price <= sl_price)
+                    or
+                    (position == "SELL"
+                     and price >= sl_price))
 
-            # Qty calculate karo
-            cap_use  = (
-                capital *
-                CAPITAL_USE / 100)
-            qty      = round(
-                cap_use *
-                LEVERAGE / mid, 3)
-            qty      = max(0.001, qty)
+                if hit_tp or hit_sl:
+                    # Close karo
+                    exit_px, exit_fee = (
+                        close_trade(
+                            ex,
+                            position,
+                            qty))
 
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # 2. FILL CHECK
-            # Exchange ne fill kiya?
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    if not exit_px:
+                        exit_px  = price
+                        exit_fee = (
+                            price * qty *
+                            TAKER_FEE)
 
-            # BUY fill check
-            if buy_id is not None:
-                b_stat, b_qty, b_px = (
-                    get_order_status(
-                        ex, buy_id))
-
-                if b_stat == "filled":
-                    # ✅ BUY FILL HUA!
-                    buy_fills += 1
-                    trades    += 1
-                    inventory += b_qty
-
-                    # Avg price update
-                    if avg_price == 0:
-                        avg_price = b_px
+                    # PnL
+                    if position == "BUY":
+                        gross = (
+                            (exit_px -
+                             entry_price) *
+                            qty)
                     else:
-                        new_inv   = (
-                            inventory)
-                        avg_price = (
-                            (avg_price *
-                             (inventory -
-                              b_qty) +
-                             b_px * b_qty)
-                            / new_inv
-                            if new_inv > 0
-                            else b_px)
+                        gross = (
+                            (entry_price -
+                             exit_px) *
+                            qty)
 
-                    buy_id = None
-
-                    print(
-                        f"✅ BUY FILLED "
-                        f"#{buy_fills} | "
-                        f"{b_qty}@{b_px} | "
-                        f"Inv={inventory:.4f}")
-
-                    save_trade(
-                        "BUY", b_px,
-                        b_qty, 0.0,
-                        capital, trades)
-
-                    send_tg(
-                        f"✅ BUY FILL "
-                        f"#{buy_fills}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Price    : {b_px:.2f}\n"
-                        f"Qty      : "
-                        f"{b_qty:.4f} ETH\n"
-                        f"Fee      : "
-                        f"0% Maker FREE\n"
-                        f"Inventory: "
-                        f"{inventory:.4f} ETH\n"
-                        f"Avg Price: "
-                        f"{avg_price:.2f}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━"
-                    )
-
-            # SELL fill check
-            if sell_id is not None:
-                s_stat, s_qty, s_px = (
-                    get_order_status(
-                        ex, sell_id))
-
-                if s_stat == "filled":
-                    # 💰 SELL FILL HUA!
-                    sell_fills += 1
-                    trades     += 1
-
-                    # Profit calculate
-                    if avg_price > 0:
-                        profit = (
-                            (s_px -
-                             avg_price) *
-                            s_qty)
-                    else:
-                        profit = (
-                            HALF_SPREAD *
-                            s_qty)
-
-                    # Fee deduct
-                    entry_fee = (
-                        avg_price *
-                        s_qty *
-                        MAKER_FEE)
-                    exit_fee  = (
-                        s_px *
-                        s_qty *
-                        MAKER_FEE)
                     total_fee = (
                         entry_fee +
                         exit_fee)
-                    net_profit = (
-                        profit - total_fee)
+                    net_pnl = (
+                        gross - total_fee)
 
-                    gross     += profit
-                    net       += net_profit
-                    capital   += net_profit
-                    inventory -= s_qty
+                    capital += net_pnl
+                    net     += net_pnl
+                    trades  += 1
 
-                    if inventory < 0.001:
-                        inventory = 0.0
-                        avg_price = 0.0
-
-                    if net_profit > best:
-                        best = net_profit
-                    if net_profit > 0:
+                    if hit_tp:
+                        label = "TAKE PROFIT ✅"
+                        icon  = "🟢"
                         wins += 1
+                        cd_end = (
+                            time.time() +
+                            CD_WIN)
                     else:
+                        label = "STOP LOSS ❌"
+                        icon  = "🔴"
                         losses += 1
+                        cd_end = (
+                            time.time() +
+                            CD_LOSS)
 
-                    sell_id = None
-
-                    save_cap(capital)
-                    save_trade(
-                        "SELL", s_px,
-                        s_qty,
-                        net_profit,
-                        capital, trades)
+                    if net_pnl > best:
+                        best = net_pnl
+                    if (worst == 0 or
+                            net_pnl < worst):
+                        worst = net_pnl
 
                     wr = round(
                         wins /
-                        max(1,
-                            wins + losses)
+                        max(1, wins+losses)
                         * 100, 1)
-
-                    print(
-                        f"💰 SELL FILLED "
-                        f"#{sell_fills} | "
-                        f"{s_qty}@{s_px} | "
-                        f"P={net_profit:+.4f} | "
-                        f"Net={net:+.4f} | "
-                        f"WR={wr}%")
-
-                    send_tg(
-                        f"💰 SELL FILL "
-                        f"#{sell_fills}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Price    : {s_px:.2f}\n"
-                        f"Qty      : "
-                        f"{s_qty:.4f} ETH\n"
-                        f"Gross    : "
-                        f"{profit:+.4f} USDT\n"
-                        f"Fee      : "
-                        f"-{total_fee:.4f}\n"
-                        f"Net PnL  : "
-                        f"{net_profit:+.4f} USDT\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Total Net: "
-                        f"{net:+.4f} USDT\n"
-                        f"Capital  : "
-                        f"{capital:.4f} USDT\n"
-                        f"Win Rate : {wr}%\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━"
-                    )
-
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # 3. INVENTORY CHECK
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            inv_pnl = (
-                (mid - avg_price) *
-                inventory
-                if avg_price > 0
-                else 0.0)
-
-            # Stop loss hit?
-            if inv_pnl < INV_SL:
-                print(
-                    f"[STOP LOSS] "
-                    f"InvPnL={inv_pnl:.2f}")
-
-                # Cancel orders
-                cancel(ex, buy_id)
-                cancel(ex, sell_id)
-                buy_id  = None
-                sell_id = None
-
-                # Market mein close karo
-                if inventory > 0:
-                    hp, hf = market_close(
-                        ex, "sell",
-                        inventory)
-                    if hp > 0:
-                        hloss = (
-                            inv_pnl - hf)
-                        net      += hloss
-                        capital  += hloss
-                        hedge_cost += hloss
-                        save_cap(capital)
-                        save_trade(
-                            "HEDGE", hp,
-                            inventory,
-                            hloss,
-                            capital,
-                            trades)
-
-                        send_tg(
-                            f"🚨 STOP LOSS!\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"Inv Loss : "
-                            f"{inv_pnl:.2f}\n"
-                            f"Closed   : "
-                            f"{inventory:.4f} ETH\n"
-                            f"At Price : {hp:.2f}\n"
-                            f"Net Loss : "
-                            f"{hloss:.4f} USDT\n"
-                            f"Capital  : "
-                            f"{capital:.4f}\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━"
-                        )
-
-                        inventory = 0.0
-                        avg_price = 0.0
-
-                time.sleep(2)
-                continue
-
-            # Inventory hedge?
-            if inventory >= HEDGE_INV:
-                h_qty = round(
-                    inventory / 2, 3)
-
-                cancel(ex, buy_id)
-                buy_id = None
-
-                hp, hf = market_close(
-                    ex, "sell", h_qty)
-
-                if hp > 0:
-                    hprofit = (
-                        (hp - avg_price) *
-                        h_qty - hf)
-                    net       += hprofit
-                    capital   += hprofit
-                    hedge_cost += -hf
-                    inventory  -= h_qty
-
-                    if inventory < 0.001:
-                        inventory = 0.0
-                        avg_price = 0.0
 
                     save_cap(capital)
                     save_trade(
-                        "HEDGE", hp,
-                        h_qty, hprofit,
-                        capital, trades)
+                        position,
+                        entry_price,
+                        exit_px,
+                        gross,
+                        total_fee,
+                        net_pnl,
+                        capital,
+                        f"{held}s",
+                        label,
+                        trades)
+
+                    print(
+                        f"[#{trades}] "
+                        f"{label} | "
+                        f"{position} | "
+                        f"Net={net_pnl:+.4f} | "
+                        f"Cap={capital:.2f} | "
+                        f"WR={wr}%")
 
                     send_tg(
-                        f"🔄 PARTIAL HEDGE\n"
+                        f"{icon} {label}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Sold     : "
-                        f"{h_qty:.4f} ETH\n"
-                        f"Price    : {hp:.2f}\n"
-                        f"Profit   : "
-                        f"{hprofit:+.4f} USDT\n"
-                        f"Inv Left : "
-                        f"{inventory:.4f} ETH\n"
-                        f"Capital  : "
-                        f"{capital:.4f}\n"
+                        f"Trade # : {trades}\n"
+                        f"Mode    : {MODE}\n"
+                        f"Side    : {position}\n"
+                        f"Entry   : "
+                        f"{entry_price:.2f}\n"
+                        f"Exit    : "
+                        f"{exit_px:.2f}\n"
+                        f"Time    : {held}s\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Gross   : "
+                        f"{gross:+.4f} USDT\n"
+                        f"Fee     : "
+                        f"-{total_fee:.4f} USDT\n"
+                        f"NET PnL : "
+                        f"{net_pnl:+.4f} USDT\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"Capital : "
+                        f"{capital:.4f} USDT\n"
+                        f"Win Rate: {wr}%\n"
+                        f"Total   : {trades}\n"
                         f"━━━━━━━━━━━━━━━━━━━━━━"
                     )
 
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # 4. CANCEL OLD ORDERS
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            cancel(ex, buy_id)
-            cancel(ex, sell_id)
-            buy_id  = None
-            sell_id = None
+                    # Reset
+                    position    = None
+                    entry_price = 0.0
+                    entry_time  = None
+                    qty         = 0.0
+                    tp_price    = 0.0
+                    sl_price    = 0.0
+                    cap_used    = 0.0
+                    entry_fee   = 0.0
 
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # 5. NAYE ORDERS LAGAO
+            # COOLDOWN
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-            # Buy order
-            if inventory < MAX_INV:
-                buy_id = place_buy(
-                    ex, our_bid, qty)
-
-            # Sell order
-            if inventory > 0:
-                sell_qty = min(
-                    qty, inventory)
-                sell_id = place_sell(
-                    ex, our_ask,
-                    sell_qty)
-            else:
-                sell_id = place_sell(
-                    ex, our_ask, qty)
+            if (cd_end and
+                    time.time() < cd_end):
+                set_state(
+                    price=price,
+                    cycles=cycles)
+                elapsed = (
+                    time.time() - loop_st)
+                time.sleep(max(
+                    0,
+                    SCAN_SEC - elapsed))
+                continue
 
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # 6. STATE UPDATE
+            # NEW ENTRY
             # ━━━━━━━━━━━━━━━━━━━━━━━━━━
+            if position is None:
+                signal = get_signal(price)
+
+                if signal in [
+                        "BUY", "SELL"]:
+
+                    cap_used = (
+                        capital *
+                        CAPITAL_USE / 100)
+                    qty = round(
+                        cap_used *
+                        LEVERAGE / price,
+                        3)
+                    qty = max(0.001, qty)
+
+                    fill_px, e_fee = (
+                        open_trade(
+                            ex,
+                            signal,
+                            price,
+                            qty))
+
+                    if fill_px:
+                        entry_price = fill_px
+                        entry_time  = (
+                            datetime.now())
+                        position    = signal
+                        entry_fee   = e_fee
+
+                        if signal == "BUY":
+                            tp_price = round(
+                                fill_px *
+                                (1 +
+                                 TP_PCT/100),
+                                2)
+                            sl_price = round(
+                                fill_px *
+                                (1 -
+                                 SL_PCT/100),
+                                2)
+                        else:
+                            tp_price = round(
+                                fill_px *
+                                (1 -
+                                 TP_PCT/100),
+                                2)
+                            sl_price = round(
+                                fill_px *
+                                (1 +
+                                 SL_PCT/100),
+                                2)
+
+                        exp_w = round(
+                            cap_used *
+                            LEVERAGE *
+                            TP_PCT/100, 2)
+                        exp_l = round(
+                            cap_used *
+                            LEVERAGE *
+                            SL_PCT/100, 2)
+
+                        print(
+                            f"[ENTRY] "
+                            f"{signal} | "
+                            f"{qty}@"
+                            f"{fill_px:.2f}")
+
+                        send_tg(
+                            f"🚀 ENTRY "
+                            f"#{trades+1}\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"Mode    : {MODE}\n"
+                            f"Side    : {signal}\n"
+                            f"Entry   : "
+                            f"{fill_px:.2f}\n"
+                            f"TP      : "
+                            f"{tp_price:.2f}\n"
+                            f"SL      : "
+                            f"{sl_price:.2f}\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"Capital : "
+                            f"{cap_used:.2f}\n"
+                            f"Qty     : {qty}\n"
+                            f"Exp Win : +{exp_w}\n"
+                            f"Exp Loss: -{exp_l}\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━"
+                        )
+
+            # State update
             set_state(
-                price=mid,
-                bid=best_bid,
-                ask=best_ask,
-                spread=spread,
-                buy_id=buy_id,
-                sell_id=sell_id,
-                our_bid=our_bid,
-                our_ask=our_ask,
-                inventory=inventory,
-                avg_price=avg_price,
-                inv_pnl=inv_pnl,
+                price=price,
+                position=position,
+                entry=entry_price,
+                tp=tp_price,
+                sl=sl_price,
+                qty=qty,
+                cap_used=cap_used,
                 capital=capital,
                 start_cap=start_cap,
                 trades=trades,
-                buy_fills=buy_fills,
-                sell_fills=sell_fills,
-                gross=gross,
-                hedge_cost=hedge_cost,
-                net=net,
-                best=best,
-                cycles=cycles,
                 wins=wins,
                 losses=losses,
+                net=net,
+                best=best,
+                worst=worst,
+                cycles=cycles,
             )
 
-            # Print
-            if cycles % 10 == 0:
+            if cycles % 30 == 0:
+                wr = round(
+                    wins /
+                    max(1, wins+losses)
+                    * 100, 1)
                 print(
-                    f"[{cycles}] "
-                    f"ETH={mid:.2f} | "
-                    f"Bid={our_bid:.2f} | "
-                    f"Ask={our_ask:.2f} | "
-                    f"Inv={inventory:.3f} | "
+                    f"[C{cycles}] "
+                    f"ETH={price:.2f} | "
+                    f"Pos={position} | "
                     f"Net={net:+.4f} | "
-                    f"BF={buy_fills} "
-                    f"SF={sell_fills}")
+                    f"T={trades} "
+                    f"WR={wr}%")
 
-            # Speed control
             elapsed = (
-                time.time() - loop_start)
-            sleep_t = max(
-                0,
-                REFRESH_TIME - elapsed)
-            if sleep_t > 0:
-                time.sleep(sleep_t)
+                time.time() - loop_st)
+            time.sleep(max(
+                0, SCAN_SEC - elapsed))
 
         except Exception as e:
             err = str(e)
             print(f"[ERR] {err}")
-
             if "429" in err:
                 time.sleep(10)
-            elif ("margin" in
-                  err.lower() or
-                  "balance" in
-                  err.lower()):
-                send_tg(
-                    f"⚠️ BALANCE LOW!\n"
-                    f"Capital: {capital:.2f}")
-                time.sleep(30)
             elif ("connection" in
                   err.lower() or
                   "timeout" in
                   err.lower()):
-                cancel(ex, buy_id)
-                cancel(ex, sell_id)
-                buy_id  = None
-                sell_id = None
-                ex = get_exchange()
+                try:
+                    ex = get_exchange()
+                except Exception:
+                    pass
                 time.sleep(5)
             else:
-                cancel(ex, buy_id)
-                cancel(ex, sell_id)
-                buy_id  = None
-                sell_id = None
                 time.sleep(2)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ▶️ START
+#  START
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 if __name__ == "__main__":
 
-    print("=" * 50)
-    print("  ETH MARKET MAKING BOT")
-    print("  BINANCE FUTURES TESTNET")
-    print("=" * 50)
-    print(f"  Symbol    : {SYMBOL}")
-    print(f"  Leverage  : {LEVERAGE}x")
-    print(f"  Spread    : ±{HALF_SPREAD}")
-    print(f"  Refresh   : {REFRESH_TIME}s")
-    print(f"  Max Inv   : {MAX_INV} ETH")
-    print(f"  Hedge At  : {HEDGE_INV} ETH")
-    print(f"  Stop Loss : {INV_SL} USDT")
-    print("-" * 50)
-    print(f"  Maker Fee : {MAKER_FEE*100}%")
-    print(f"  Taker Fee : {TAKER_FEE*100}%")
-    print("=" * 50)
+    print("=" * 45)
+    print("  ETH TRADING BOT")
+    print(f"  {MODE_NAME}")
+    print("=" * 45)
+    print(f"  Symbol  : {SYMBOL}")
+    print(f"  Leverage: {LEVERAGE}x")
+    print(f"  TP      : {TP_PCT}%")
+    print(f"  SL      : {SL_PCT}%")
+    print("=" * 45)
 
-    if "YAHAN" in API_KEY:
+    has_key = (
+        "YAHAN" not in API_KEY and
+        len(API_KEY) > 10)
+
+    if not has_key:
         print(
-            "❌ API KEY DAALO PEHLE!\n"
-            "API_KEY = 'apni_key'\n"
-            "API_SECRET = 'apna_secret'")
+            "\n❌ API KEY DAALO!\n"
+            "\nTestnet ke liye:\n"
+            "TESTNET_API_KEY = "
+            "'apni_testnet_key'\n"
+            "TESTNET_API_SECRET = "
+            "'apna_testnet_secret'\n")
     else:
         threads = [
             threading.Thread(
@@ -1286,11 +1186,10 @@ if __name__ == "__main__":
             print(f"[✅] {t.name}")
             time.sleep(0.3)
 
-        print("=" * 50)
+        print("=" * 45)
+        print(f"[✅] {MODE_NAME}")
         print("[✅] Bot Live!")
-        print("[✅] Binance Testnet")
-        print("[✅] Real Orders!")
-        print("=" * 50)
+        print("=" * 45)
 
         while True:
             time.sleep(60)
