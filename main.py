@@ -736,3 +736,7 @@ def analyze_trade_flow(ex):
             f"Ratio={ratio:.2f}")
 
         return signal, buy_vol, sell_vol
+
+      except Exception as e:
+        print(f"[FLOW ERROR] {E}")
+        return "FLAT",0.0,0.0
