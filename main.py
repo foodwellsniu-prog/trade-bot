@@ -1,1195 +1,738 @@
 """
-ETH Trading Bot
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Sirf YE choose karo:
-MODE = "TESTNET"  → Demo trading
-MODE = "REAL"     → Real trading
+ETH High Frequency Scalping Bot v4.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Strategy : Order Book + Trade Flow
+           + Price Velocity
+           Next few seconds predict karo
+           Us side LIMIT entry lo
+           Maker rebate kamao
+Symbol   : ETH/USDT
+Capital  : 1052 USDT
+Leverage : 5x
+TP       : Limit Order (Maker Rebate)
+SL       : Bot Monitor → Market Order
+Max Hold : 10 seconds
 
-Bas ek line change karo!
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FEE STRUCTURE (Binance Futures)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Maker (Limit) : -0.02% (exchange deta hai)
+Taker (Market): +0.05% (tum dete ho)
+
+Entry  = Limit Order → Maker Rebate MILEGA
+TP     = Limit Order → Maker Rebate MILEGA
+SL     = Market Order → Fee lagegi (safety)
+
+Net Fee per winning trade = +rebate +rebate
+Net Fee per losing trade  = +rebate -fee
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
 
 import ccxt
+import pandas as pd
+import numpy as np
 import requests
 import threading
 import time
 import json
 import os
 from flask import Flask
-from datetime import (
-    datetime, timezone, timedelta)
-from collections import deque
+from datetime import datetime, timezone, timedelta
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 @app.route('/')
 def home():
-    return "ETH Bot Running ✅"
+    return "ETH HF Scalping Bot v4.0 Running! Maker Order Edition"
 
 def run_server():
-    port = int(
-        os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ⚙️ MAIN CONFIG
-#  SIRF YAHAN CHANGES KARO
+#  CONFIG
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# ✅ MODE CHOOSE KARO:
-# "TESTNET" = Demo trading (safe)
-# "REAL"    = Real money trading
-MODE = "TESTNET"
+SYMBOL     = "ETH/USDT:USDT"
+
+# ── API Keys (Environment Variables se lo) ─
+# Render par Environment Variables mein set karo:
+# BINANCE_API_KEY    = tumhari testnet api key
+# BINANCE_API_SECRET = tumhara testnet api secret
+API_KEY    = os.environ.get("H647cSQelN9Im9o22wTu3h3oz3ZTBgxSzV5McQzN7qJoWg94lPGmR6JaCawbmS5S")
+API_SECRET = os.environ.get("O2Gz79sooHsYAzd2oyJQ2rmE8KwhhF5JCs9KlwHwFToTitszOaLMRDFYCobz6gSW")
+
+# ── Telegram (Environment Variables se lo) ─
+# Render par set karo:
+# TELEGRAM_BOT_TOKEN = naya token BotFather se
+# TELEGRAM_CHAT_ID   = tumhara chat id
+BOT_TOKEN  = os.environ.get("8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w")
+CHAT_ID    = os.environ.get("7102976298")
+
+# ── Testnet Toggle ────────────────────────
+# True  = Binance Testnet (safe testing)
+# False = Live Binance (real money)
+USE_TESTNET = True
+
+# ── Capital ───────────────────────────────
+CAPITAL     = 1052.0
+CAPITAL_USE = 90      # 90% capital use karo
+LEVERAGE    = 5
+
+# ── Trade Config ──────────────────────────
+TP_PCT   = 0.05   # 0.05% target
+SL_PCT   = 0.03   # 0.03% stop loss
+MAX_HOLD = 10     # 10 seconds max
+
+# ── Limit Order Config ────────────────────
+# Entry ke liye price kitna better rakho
+# BUY  entry: current_price - ENTRY_OFFSET  (thoda neeche)
+# SELL entry: current_price + ENTRY_OFFSET  (thoda upar)
+ENTRY_OFFSET_PCT = 0.003   # 0.003% = ~0.05 cents on $1600
+
+# TP limit order ka offset
+# BUY  TP: tp_price - TP_LIMIT_OFFSET  (thoda neeche se pakdo)
+# SELL TP: tp_price + TP_LIMIT_OFFSET  (thoda upar se pakdo)
+TP_LIMIT_OFFSET_PCT = 0.002  # 0.002%
+
+# ── Maker Fee Rate ────────────────────────
+MAKER_REBATE_RATE = 0.0002   # 0.02% rebate milta hai
+TAKER_FEE_RATE    = 0.0005   # 0.05% fee lagti hai
+
+# ── Speed ─────────────────────────────────
+SCAN_INTERVAL        = 1   # Har 1 second scan
+ORDER_CHECK_INTERVAL = 0.5 # Har 0.5 sec order check
+
+# ── Cooldown ──────────────────────────────
+COOLDOWN_WIN   = 2    # Win ke baad 2s
+COOLDOWN_LOSS  = 5    # Loss ke baad 5s
+COOLDOWN_2LOSS = 10   # 2 loss ke baad 10s
+
+# ── Spread ────────────────────────────────
+MAX_SPREAD = 0.05
+
+# ── Order Book Config ─────────────────────
+OB_LEVELS    = 10   # Top 10 levels
+OB_IMBALANCE = 1.5  # 1.5x imbalance
+
+# ── Periodic Update ───────────────────────
+UPDATE_INTERVAL = 1800
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# TESTNET API KEYS
-# testnet.binancefuture.com se lo
+#  FILES
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TESTNET_API_KEY    = "H647cSQelN9Im9o22wTu3h3oz3ZTBgxSzV5McQzN7qJoWg94lPGmR6JaCawbmS5S"
-TESTNET_API_SECRET = "O2Gz79sooHsYAzd2oyJQ2rmE8KwhhF5JCs9KlwHwFToTitszOaLMRDFYCobz6gSW"
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# REAL API KEYS
-# binance.com se lo (baad mein)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REAL_API_KEY    = "REAL_KEY_YAHAN"
-REAL_API_SECRET = "REAL_SECRET_YAHAN"
-
-# Telegram
-BOT_TOKEN = "8161773850:AAFcWw3UnlSe2TrMooB2uvgZQZUqIW0zW2w"
-CHAT_ID   = "7102976298"
-
-# Symbol
-SYMBOL = "ETH/USDT"
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  TRADING CONFIG
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LEVERAGE     = 5
-CAPITAL_USE  = 80     # 80% use karo
-TP_PCT       = 0.15   # 0.15% TP
-SL_PCT       = 0.08   # 0.08% SL
-
-# Fees
-TAKER_FEE    = 0.0004  # 0.04%
-
-# Speed
-SCAN_SEC     = 2       # Har 2 second
-
-# Cooldown
-CD_WIN       = 1       # 1s win ke baad
-CD_LOSS      = 3       # 3s loss ke baad
-
-# Update
-UPDATE_MIN   = 30      # 30 min
-
-# Files
 FILES = {
-    "capital": "capital_bot.txt",
-    "history": "history_bot.json",
+    "capital":  "capital_eth.txt",
+    "cooldown": "cooldown_eth.txt",
+    "history":  "history_eth.json",
 }
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  AUTO CONFIG
-#  Mode ke hisab se automatic set hoga
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-if MODE == "TESTNET":
-    API_KEY    = TESTNET_API_KEY
-    API_SECRET = TESTNET_API_SECRET
-    IS_TESTNET = True
-    MODE_NAME  = "🔵 TESTNET (Demo)"
-    print("=" * 40)
-    print("  MODE: TESTNET (DEMO)")
-    print("  Fake money - Safe!")
-    print("=" * 40)
-else:
-    API_KEY    = REAL_API_KEY
-    API_SECRET = REAL_API_SECRET
-    IS_TESTNET = False
-    MODE_NAME  = "🔴 REAL TRADING"
-    print("=" * 40)
-    print("  MODE: REAL TRADING")
-    print("  REAL MONEY!")
-    print("=" * 40)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  STATE
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-lock  = threading.Lock()
+state_lock = threading.Lock()
+
 state = {
-    "price":     0.0,
-    "position":  None,
-    "entry":     0.0,
-    "tp":        0.0,
-    "sl":        0.0,
-    "qty":       0.0,
-    "cap_used":  0.0,
-    "capital":   0.0,
-    "start_cap": 0.0,
-    "trades":    0,
-    "wins":      0,
-    "losses":    0,
-    "net":       0.0,
-    "best":      0.0,
-    "worst":     0.0,
-    "cycles":    0,
-    "mode":      MODE_NAME,
+    # Position
+    "position":        None,
+    "entry_price":     0.0,
+    "entry_time":      None,
+    "sl_price":        0.0,
+    "tp_price":        0.0,
+    "pos_size":        0.0,
+    "capital_used":    0.0,
+    "capital":         CAPITAL,
+
+    # Order IDs
+    "entry_order_id":  None,
+    "tp_order_id":     None,
+    "entry_filled":    False,
+    "tp_placed":       False,
+
+    # Market
+    "last_price":      0.0,
+    "last_signal":     "WAIT",
+    "ob_signal":       "FLAT",
+    "flow_signal":     "FLAT",
+    "velocity":        0.0,
+
+    # Fee tracking
+    "total_rebate":    0.0,
+    "total_fee_paid":  0.0,
 }
 
-def set_state(**kw):
-    with lock:
-        for k, v in kw.items():
+def update_state(**kwargs):
+    with state_lock:
+        for k, v in kwargs.items():
             if k in state:
                 state[k] = v
 
-def get_state():
-    with lock:
-        return dict(state)
+def get_state(key):
+    with state_lock:
+        return state.get(key)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  CAPITAL MANAGER
+#  CAPITAL
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def load_cap():
+def load_capital():
     try:
-        with open(
-                FILES["capital"],
-                "r") as f:
+        with open(FILES["capital"], "r") as f:
             cap = float(f.read().strip())
-            if cap > 0:
-                print(
-                    f"[CAP] Loaded: "
-                    f"{cap:.2f} USDT")
-                return cap
+            print(f"[CAPITAL] Loaded: {cap} USDT")
+            return cap
+    except Exception:
+        save_capital(CAPITAL)
+        return CAPITAL
+
+def save_capital(capital):
+    try:
+        with open(FILES["capital"], "w") as f:
+            f.write(str(round(capital, 6)))
+    except Exception as e:
+        print(f"[CAPITAL ERROR] {e}")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  COOLDOWN
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def save_cooldown(end_time):
+    try:
+        with open(FILES["cooldown"], "w") as f:
+            f.write(str(end_time))
+    except Exception as e:
+        print(f"[COOLDOWN ERROR] {e}")
+
+def load_cooldown():
+    try:
+        with open(FILES["cooldown"], "r") as f:
+            val = float(f.read().strip())
+            if val > time.time():
+                print(f"[COOLDOWN] {int(val - time.time())}s")
+                return val
     except Exception:
         pass
     return None
 
-def save_cap(cap):
-    try:
-        with open(
-                FILES["capital"],
-                "w") as f:
-            f.write(str(round(cap, 4)))
-    except Exception:
-        pass
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  FEE CALCULATOR
+#  Maker rebate ya taker fee calculate karo
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def calc_maker_rebate(exposure):
+    """
+    Limit order fill hone par exchange
+    tumhe yeh rebate deta hai
+    Positive = tumhe milta hai
+    """
+    return exposure * MAKER_REBATE_RATE
+
+def calc_taker_fee(exposure):
+    """
+    Market order par yeh fee lagti hai
+    Negative = tum dete ho
+    """
+    return exposure * TAKER_FEE_RATE
+
+def calc_net_fee_winning_trade(exposure):
+    """
+    Winning trade mein:
+    Entry  = Limit (rebate milega)
+    TP     = Limit (rebate milega)
+    Total  = +rebate +rebate
+    """
+    entry_rebate = calc_maker_rebate(exposure)
+    tp_rebate    = calc_maker_rebate(exposure)
+    net          = entry_rebate + tp_rebate
+    return net  # Positive = profit
+
+def calc_net_fee_losing_trade(exposure):
+    """
+    Losing trade mein:
+    Entry  = Limit (rebate milega)
+    SL     = Market (fee lagegi)
+    Total  = +rebate -fee
+    """
+    entry_rebate = calc_maker_rebate(exposure)
+    sl_fee       = calc_taker_fee(exposure)
+    net          = entry_rebate - sl_fee
+    return net  # Negative = cost
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  HISTORY
+#  TRADE HISTORY
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-hist_lock = threading.Lock()
-
-def save_trade(
-        side, entry, exit_p,
-        gross, fee, net_pnl,
-        capital, dur, label, num):
+def save_trade(side, entry, exit_p,
+               pnl, fee, capital, duration, label):
     try:
-        with hist_lock:
-            try:
-                with open(
-                        FILES["history"],
-                        "r",
-                        encoding="utf-8") as f:
-                    h = json.load(f)
-            except Exception:
-                h = []
+        try:
+            with open(FILES["history"], "r",
+                      encoding="utf-8") as f:
+                history = json.load(f)
+        except Exception:
+            history = []
 
-            h.append({
-                "num":     num,
-                "date":    datetime.now()
-                    .strftime("%d/%m/%Y"),
-                "time":    datetime.now()
-                    .strftime("%H:%M:%S"),
-                "mode":    MODE,
-                "side":    side,
-                "entry":   round(entry, 2),
-                "exit":    round(exit_p, 2),
-                "gross":   round(gross, 4),
-                "fee":     round(fee, 4),
-                "net":     round(net_pnl, 4),
-                "capital": round(capital, 4),
-                "dur":     dur,
-                "result":  (
-                    "WIN" if net_pnl > 0
-                    else "LOSS"),
-                "label":   label,
-            })
+        history.append({
+            "date":     datetime.now().strftime("%d/%m/%Y"),
+            "time":     datetime.now().strftime("%H:%M:%S"),
+            "symbol":   "ETH",
+            "side":     side,
+            "entry":    round(entry, 4),
+            "exit":     round(exit_p, 4),
+            "pnl":      round(pnl, 4),
+            "fee":      round(fee, 4),
+            "net_pnl":  round(pnl + fee, 4),
+            "capital":  round(capital, 4),
+            "duration": duration,
+            "result":   "WIN" if (pnl + fee) > 0 else "LOSS",
+            "label":    label,
+        })
 
-            if len(h) > 50000:
-                h = h[-50000:]
+        with open(FILES["history"], "w",
+                  encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
 
-            with open(
-                    FILES["history"],
-                    "w",
-                    encoding="utf-8") as f:
-                json.dump(h, f, indent=2)
     except Exception as e:
-        print(f"[HIST] {e}")
+        print(f"[HISTORY ERROR] {e}")
 
 
-def get_today():
+def get_daily_stats():
     try:
-        with open(
-                FILES["history"],
-                "r",
-                encoding="utf-8") as f:
-            h = json.load(f)
+        with open(FILES["history"], "r",
+                  encoding="utf-8") as f:
+            history = json.load(f)
     except Exception:
         return None
 
-    today = datetime.now().strftime(
-        "%d/%m/%Y")
-    t = [
-        x for x in h
-        if x["date"] == today]
+    today  = datetime.now().strftime("%d/%m/%Y")
+    trades = [t for t in history if t["date"] == today]
 
-    if not t:
+    if not trades:
         return None
 
-    nets   = [x["net"] for x in t]
-    fees   = [x["fee"] for x in t]
-    wins   = len([
-        x for x in t
-        if x["result"] == "WIN"])
-    losses = len(t) - wins
-    hours  = max(1, len(set(
-        x["time"][:2] for x in t)))
+    total    = len(trades)
+    wins     = len([t for t in trades if t["result"] == "WIN"])
+    losses   = total - wins
+    win_rate = round((wins / total) * 100, 1)
+    pnl      = round(sum(t["pnl"] for t in trades), 4)
+    total_fee = round(sum(t.get("fee", 0) for t in trades), 4)
+    net_pnl  = round(sum(t.get("net_pnl", t["pnl"]) for t in trades), 4)
 
     return {
-        "total":   len(t),
-        "wins":    wins,
-        "losses":  losses,
-        "wr":      round(
-            wins/len(t)*100, 1),
-        "net":     round(sum(nets), 4),
-        "fees":    round(sum(fees), 4),
-        "best":    round(max(nets), 4),
-        "worst":   round(min(nets), 4),
-        "per_hr":  round(
-            sum(nets)/hours, 4),
-        "capital": t[-1]["capital"],
+        "total":     total,
+        "wins":      wins,
+        "losses":    losses,
+        "win_rate":  win_rate,
+        "pnl":       pnl,
+        "total_fee": total_fee,
+        "net_pnl":   net_pnl,
+        "best":      round(max(t["pnl"] for t in trades), 4),
+        "worst":     round(min(t["pnl"] for t in trades), 4),
+        "capital":   trades[-1]["capital"],
     }
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  EXCHANGE
-#  Testnet ya Real - Auto decide
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def get_exchange():
     while True:
         try:
-            if IS_TESTNET:
-                # ✅ TESTNET
+            if USE_TESTNET:
+                # ── Testnet ──────────────────
                 ex = ccxt.binanceusdm({
-                    "apiKey":  API_KEY,
-                    "secret":  API_SECRET,
-                    "enableRateLimit":
-                        True,
-                    "rateLimit": 100,
-                    "options": {
-                        "defaultType":
-                            "future",
-                        "sandboxMode":
-                            True,
-                    },
+                    "apiKey":          API_KEY,
+                    "secret":          API_SECRET,
+                    "enableRateLimit": True,
+                    "rateLimit":       50,
+                    "urls": {
+                        "api": {
+                            "public":  "https://testnet.binancefuture.com",
+                            "private": "https://testnet.binancefuture.com",
+                        }
+                    }
                 })
-                ex.set_sandbox_mode(True)
-                print(
-                    "[EXCHANGE] "
-                    "Testnet ✅")
+                print("[INFO] Binance TESTNET connected ✅")
             else:
-                # ✅ REAL
+                # ── Live ─────────────────────
                 ex = ccxt.binanceusdm({
-                    "apiKey":  API_KEY,
-                    "secret":  API_SECRET,
-                    "enableRateLimit":
-                        True,
-                    "rateLimit": 50,
-                    "options": {
-                        "defaultType":
-                            "future",
-                    },
+                    "apiKey":          API_KEY,
+                    "secret":          API_SECRET,
+                    "enableRateLimit": True,
+                    "rateLimit":       50,
                 })
-                print(
-                    "[EXCHANGE] "
-                    "REAL Binance ✅")
+                print("[INFO] Binance LIVE connected ✅")
 
             ex.load_markets()
-
-            try:
-                ex.set_leverage(
-                    LEVERAGE, SYMBOL)
-                print(
-                    f"[LEVERAGE] "
-                    f"{LEVERAGE}x set ✅")
-            except Exception as e:
-                print(
-                    f"[LEVERAGE] {e}")
-
             return ex
 
         except Exception as e:
-            print(
-                f"[CONN ERR] {e}\n"
-                f"15s mein retry...")
-            time.sleep(15)
+            print(f"[RECONNECT] {e} — 30s...")
+            time.sleep(30)
+
+
+def safe_fetch_ticker(ex):
+    for i in range(3):
+        try:
+            t = ex.fetch_ticker(SYMBOL)
+            return float(t["last"])
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 10)
+            else:
+                time.sleep(2)
+    return None
+
+
+def safe_fetch_orderbook(ex, limit=10):
+    for i in range(3):
+        try:
+            ob = ex.fetch_order_book(SYMBOL, limit=limit)
+            return ob
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 10)
+            else:
+                time.sleep(2)
+    return None
+
+
+def safe_fetch_trades(ex, limit=50):
+    for i in range(3):
+        try:
+            trades = ex.fetch_trades(SYMBOL, limit=limit)
+            return trades
+        except Exception as e:
+            if "429" in str(e):
+                time.sleep((i+1) * 10)
+            else:
+                time.sleep(2)
+    return None
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  BALANCE FETCH - FIXED!
+#  LIMIT ORDER FUNCTIONS
+#  Entry aur TP ke liye maker orders
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def get_balance(ex):
+def place_limit_entry(ex, side, cur_price, pos_size):
     """
-    ✅ FIXED Balance Fetch
+    Limit entry order lagao
 
-    Testnet aur Real dono ke liye
-    Sahi balance fetch karega
+    BUY  side: thoda neeche se entry lo
+               cur_price - offset
+               (market neeche aane par fill)
+
+    SELL side: thoda upar se entry lo
+               cur_price + offset
+               (market upar jaane par fill)
+
+    Yeh Maker order hai = Rebate milega
     """
     try:
-        bal = ex.fetch_balance()
+        offset = cur_price * ENTRY_OFFSET_PCT / 100
 
-        # Method 1: Normal way
-        try:
-            usdt = float(
-                bal["USDT"]["free"] or 0)
-            if usdt > 0:
-                print(
-                    f"[BAL M1] "
-                    f"{usdt:.2f} USDT")
-                return usdt
-        except Exception:
-            pass
+        if side == "BUY":
+            limit_price = round(cur_price - offset, 2)
+            order = ex.create_limit_buy_order(
+                SYMBOL,
+                pos_size,
+                limit_price,
+                params={"timeInForce": "GTC"}
+            )
+        else:  # SELL
+            limit_price = round(cur_price + offset, 2)
+            order = ex.create_limit_sell_order(
+                SYMBOL,
+                pos_size,
+                limit_price,
+                params={"timeInForce": "GTC"}
+            )
 
-        # Method 2: Total way
-        try:
-            usdt = float(
-                bal["total"].get(
-                    "USDT", 0) or 0)
-            if usdt > 0:
-                print(
-                    f"[BAL M2] "
-                    f"{usdt:.2f} USDT")
-                return usdt
-        except Exception:
-            pass
+        print(
+            f"[LIMIT ENTRY] {side} | "
+            f"Market={cur_price:.4f} | "
+            f"Limit={limit_price:.4f} | "
+            f"Size={pos_size:.4f} | "
+            f"OrderID={order['id']}")
 
-        # Method 3: Info way
-        try:
-            info   = bal.get("info", {})
-            assets = info.get(
-                "assets", [])
-            for a in assets:
-                if a.get(
-                        "asset") == "USDT":
-                    usdt = float(
-                        a.get(
-                            "availableBalance",
-                            0) or 0)
-                    if usdt > 0:
-                        print(
-                            f"[BAL M3] "
-                            f"{usdt:.2f} USDT")
-                        return usdt
-        except Exception:
-            pass
-
-        # Method 4: Free dict
-        try:
-            free = bal.get("free", {})
-            usdt = float(
-                free.get("USDT", 0) or 0)
-            if usdt > 0:
-                print(
-                    f"[BAL M4] "
-                    f"{usdt:.2f} USDT")
-                return usdt
-        except Exception:
-            pass
-
-        print("[BAL] Koi method kaam nahi kiya")
-        return 0.0
+        return order['id'], limit_price
 
     except Exception as e:
-        print(f"[BAL ERR] {e}")
-        return 0.0
+        print(f"[LIMIT ENTRY ERROR] {e}")
+        return None, None
+
+
+def place_limit_tp(ex, side, tp_price, pos_size):
+    """
+    Limit TP order lagao
+
+    BUY  side: sell karna hai TP par
+               tp_price + offset (thoda upar)
+               (better price milegi)
+
+    SELL side: buy karna hai TP par
+               tp_price - offset (thoda neeche)
+               (better price milegi)
+
+    Yeh bhi Maker order = Rebate milega
+    """
+    try:
+        offset = tp_price * TP_LIMIT_OFFSET_PCT / 100
+
+        if side == "BUY":
+            # Position close karna hai SELL se
+            limit_price = round(tp_price + offset, 2)
+            order = ex.create_limit_sell_order(
+                SYMBOL,
+                pos_size,
+                limit_price,
+                params={
+                    "timeInForce":  "GTC",
+                    "reduceOnly":   True,
+                }
+            )
+        else:  # SELL position close karna hai BUY se
+            limit_price = round(tp_price - offset, 2)
+            order = ex.create_limit_buy_order(
+                SYMBOL,
+                pos_size,
+                limit_price,
+                params={
+                    "timeInForce":  "GTC",
+                    "reduceOnly":   True,
+                }
+            )
+
+        print(
+            f"[LIMIT TP] {side} close | "
+            f"TP price={tp_price:.4f} | "
+            f"Limit={limit_price:.4f} | "
+            f"OrderID={order['id']}")
+
+        return order['id'], limit_price
+
+    except Exception as e:
+        print(f"[LIMIT TP ERROR] {e}")
+        return None, None
+
+
+def place_market_exit(ex, side, pos_size, reason):
+    """
+    Market order se exit karo (SL ya emergency)
+
+    Yeh Taker order hai = Fee lagegi
+    Lekin SAFETY ke liye zaroori hai
+
+    SL par limit order KABHI MAT LAGAO!
+    Market gap hone par fill nahi hoga
+    Aur loss bahut bada ho sakta hai
+    """
+    try:
+        if side == "BUY":
+            # BUY position close = SELL
+            order = ex.create_market_sell_order(
+                SYMBOL,
+                pos_size,
+                params={"reduceOnly": True}
+            )
+        else:
+            # SELL position close = BUY
+            order = ex.create_market_buy_order(
+                SYMBOL,
+                pos_size,
+                params={"reduceOnly": True}
+            )
+
+        filled_price = float(
+            order.get('average', 0) or
+            order.get('price', 0))
+
+        print(
+            f"[MARKET EXIT] {reason} | "
+            f"Side={side} | "
+            f"Price={filled_price:.4f} | "
+            f"OrderID={order['id']}")
+
+        return order['id'], filled_price
+
+    except Exception as e:
+        print(f"[MARKET EXIT ERROR] {e}")
+        return None, None
+
+
+def cancel_order(ex, order_id):
+    """Pending order cancel karo"""
+    try:
+        if order_id:
+            ex.cancel_order(order_id, SYMBOL)
+            print(f"[CANCEL] Order {order_id} cancelled")
+    except Exception as e:
+        print(f"[CANCEL ERROR] {e}")
+
+
+def check_order_filled(ex, order_id):
+    """
+    Order fill hua ya nahi check karo
+    Returns: (filled, avg_price)
+    """
+    try:
+        order = ex.fetch_order(order_id, SYMBOL)
+        status = order.get('status', '')
+
+        if status == 'closed':
+            avg_price = float(
+                order.get('average', 0) or
+                order.get('price', 0))
+            return True, avg_price
+
+        return False, 0.0
+
+    except Exception as e:
+        print(f"[ORDER CHECK ERROR] {e}")
+        return False, 0.0
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  TELEGRAM
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-tg_q    = []
-tg_lock = threading.Lock()
+def send_telegram(message):
+    if not BOT_TOKEN or not CHAT_ID:
+        print(f"[TELEGRAM SKIP] Token/ChatID missing")
+        return
 
-def send_tg(msg):
-    with tg_lock:
-        tg_q.append(str(msg))
-
-def tg_worker():
-    url = (
-        f"https://api.telegram.org"
-        f"/bot{BOT_TOKEN}/sendMessage")
-    while True:
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    for attempt in range(3):
         try:
-            msg = None
-            with tg_lock:
-                if tg_q:
-                    msg = tg_q.pop(0)
-            if msg:
-                for _ in range(3):
-                    try:
-                        requests.post(
-                            url,
-                            data={
-                                "chat_id":
-                                    CHAT_ID,
-                                "text":
-                                    f"🤖 ETH BOT\n"
-                                    f"{msg}",
-                            },
-                            timeout=10)
-                        break
-                    except Exception:
-                        time.sleep(2)
-            else:
-                time.sleep(0.1)
+            r = requests.post(
+                url,
+                data={
+                    "chat_id": CHAT_ID,
+                    "text":    f"[v4.0] {message}",
+                },
+                timeout=15)
+            if r.status_code == 200:
+                return
         except Exception as e:
-            print(f"[TG] {e}")
-            time.sleep(2)
+            print(f"[TELEGRAM] {attempt+1}/3: {e}")
+            time.sleep(3)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  SIGNAL
+#  PnL CALCULATOR
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-price_hist = deque(maxlen=20)
-
-def get_signal(price):
-    price_hist.append(price)
-    if len(price_hist) < 6:
-        return "WAIT"
-
-    prices = list(price_hist)
-    recent = prices[-3:]
-    older  = prices[-6:-3]
-
-    r_avg = sum(recent) / len(recent)
-    o_avg = sum(older)  / len(older)
-
-    change = (
-        (r_avg - o_avg) /
-        o_avg * 100)
-
-    if change > 0.02:
-        return "BUY"
-    elif change < -0.02:
-        return "SELL"
+def calc_pnl(side, entry, exit_p, pos_size):
+    if side == "BUY":
+        return (exit_p - entry) * pos_size
     else:
-        return "WAIT"
+        return (entry - exit_p) * pos_size
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  ORDERS
+#  ORDER BOOK ANALYSIS
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-def open_trade(ex, side, price, qty):
+def analyze_orderbook(ex):
     try:
-        if side == "BUY":
-            o = ex.create_market_buy_order(
-                SYMBOL, qty)
+        ob = safe_fetch_orderbook(ex, limit=OB_LEVELS)
+        if ob is None:
+            return "FLAT", 0.0, 0.0, 0.0
+
+        bids = ob["bids"]
+        asks = ob["asks"]
+
+        if not bids or not asks:
+            return "FLAT", 0.0, 0.0, 0.0
+
+        best_bid = float(bids[0][0])
+        best_ask = float(asks[0][0])
+
+        spread = ((best_ask - best_bid) / best_bid) * 100
+
+        if spread > MAX_SPREAD:
+            print(f"[OB] Spread HIGH {spread:.4f}% ❌")
+            return "FLAT", 0.0, spread, 0.0
+
+        bid_vol = sum(float(b[1]) for b in bids[:10])
+        ask_vol = sum(float(a[1]) for a in asks[:10])
+
+        if ask_vol == 0:
+            return "FLAT", 0.0, spread, 0.0
+
+        ratio = bid_vol / ask_vol
+
+        if ratio >= OB_IMBALANCE:
+            signal = "BUY"
+        elif ratio <= (1 / OB_IMBALANCE):
+            signal = "SELL"
         else:
-            o = ex.create_market_sell_order(
-                SYMBOL, qty)
+            signal = "FLAT"
 
-        fill = float(
-            o.get("average") or
-            o.get("price") or price)
-        fee  = fill * qty * TAKER_FEE
+        mid_price = (best_bid + best_ask) / 2
 
-        return fill, fee
+        print(
+            f"[OB] {signal} | "
+            f"BidVol={bid_vol:.2f} | "
+            f"AskVol={ask_vol:.2f} | "
+            f"Ratio={ratio:.2f} | "
+            f"Spread={spread:.4f}%")
+
+        return signal, mid_price, spread, ratio
 
     except Exception as e:
-        print(f"[OPEN] {e}")
-        return None, 0
+        print(f"[OB ERROR] {e}")
+        return "FLAT", 0.0, 0.0, 0.0
 
 
-def close_trade(ex, side, qty):
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  TRADE FLOW ANALYSIS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+def analyze_trade_flow(ex):
     try:
-        close = (
-            "sell"
-            if side == "BUY"
-            else "buy")
+        trades = safe_fetch_trades(ex, limit=50)
+        if not trades:
+            return "FLAT", 0.0, 0.0
 
-        if close == "sell":
-            o = ex.create_market_sell_order(
-                SYMBOL, qty,
-                {"reduceOnly": True})
+        buy_vol  = 0.0
+        sell_vol = 0.0
+
+        for t in trades:
+            side = t.get("side", "")
+            amt  = float(t.get("amount", 0))
+            if side == "buy":
+                buy_vol += amt
+            elif side == "sell":
+                sell_vol += amt
+
+        if sell_vol == 0:
+            return "FLAT", 0.0, 0.0
+
+        ratio = buy_vol / sell_vol
+
+        if ratio >= 1.3:
+            signal = "BUY"
+        elif ratio <= 0.7:
+            signal = "SELL"
         else:
-            o = ex.create_market_buy_order(
-                SYMBOL, qty,
-                {"reduceOnly": True})
+            signal = "FLAT"
 
-        fill = float(
-            o.get("average") or
-            o.get("price") or 0)
-        fee  = fill * qty * TAKER_FEE
-
-        return fill, fee
-
-    except Exception as e:
-        print(f"[CLOSE] {e}")
-        return None, 0
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  UPDATE
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def run_update():
-    time.sleep(60)
-    while True:
-        try:
-            st    = get_state()
-            today = get_today()
-            now   = datetime.now()\
-                .strftime(
-                    "%Y-%m-%d %H:%M")
-
-            cap   = st["capital"]
-            scap  = st["start_cap"]
-            net   = st["net"]
-            tc    = st["trades"]
-            wins  = st["wins"]
-            losses= st["losses"]
-            price = st["price"]
-            pos   = st["position"]
-            cyc   = st["cycles"]
-            growth= round(cap-scap, 4)
-            growp = round(
-                growth /
-                max(1, scap) * 100, 2)
-            wr    = round(
-                wins /
-                max(1, wins+losses)
-                * 100, 1)
-
-            if pos:
-                entry = st["entry"]
-                pnl_now = (
-                    (price - entry) *
-                    st["qty"]
-                    if pos == "BUY"
-                    else
-                    (entry - price) *
-                    st["qty"])
-                icon = (
-                    "🟢" if pnl_now >= 0
-                    else "🔴")
-                pos_txt = (
-                    f"{icon} {pos}\n"
-                    f"Entry  : {entry:.2f}\n"
-                    f"Now    : {price:.2f}\n"
-                    f"TP     : {st['tp']:.2f}\n"
-                    f"SL     : {st['sl']:.2f}\n"
-                    f"PnL Now: "
-                    f"{pnl_now:+.4f}\n")
-            else:
-                pos_txt = (
-                    f"⏳ WAIT\n"
-                    f"Price  : {price:.2f}\n")
-
-            msg = (
-                f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"  ETH BOT UPDATE\n"
-                f"  {now}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{st['mode']}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"POSITION\n"
-                f"{pos_txt}"
-                f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"STATS\n"
-                f"Cycles : {cyc}\n"
-                f"Trades : {tc}\n"
-                f"Wins   : {wins} ✅\n"
-                f"Losses : {losses} ❌\n"
-                f"WR     : {wr}%\n"
-                f"Net    : {net:+.4f}\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"CAPITAL\n"
-                f"Start  : {scap:.2f}\n"
-                f"Now    : {cap:.4f}\n"
-                f"Growth : {growth:+.4f}\n"
-                f"ROI    : {growp:+.2f}%\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━")
-
-            if today:
-                ph = today["per_hr"]
-                pd = round(ph*24, 2)
-                pm = round(pd*30, 2)
-                msg += (
-                    f"\nTODAY\n"
-                    f"Trades : {today['total']}\n"
-                    f"WR     : {today['wr']}%\n"
-                    f"Fees   : -{today['fees']}\n"
-                    f"Net    : "
-                    f"{today['net']:+.4f}\n"
-                    f"Per Hr : +{ph:.4f}\n"
-                    f"Per Day: +{pd:.2f}\n"
-                    f"Monthly: +{pm:.2f}\n"
-                    f"━━━━━━━━━━━━━━━━━━━━━━")
-
-            send_tg(msg)
-
-        except Exception as e:
-            print(f"[UPD] {e}")
-
-        time.sleep(UPDATE_MIN * 60)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  DAILY
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def run_daily():
-    while True:
-        try:
-            ist = timezone(timedelta(
-                hours=5, minutes=30))
-            now = datetime.now(ist)
-            if (now.hour == 23 and
-                    now.minute == 59):
-                today = get_today()
-                st    = get_state()
-                date  = now.strftime(
-                    "%d/%m/%Y")
-                if today:
-                    growth = round(
-                        st["capital"] -
-                        st["start_cap"],
-                        4)
-                    roi    = round(
-                        growth /
-                        max(1,
-                            st["start_cap"])
-                        * 100, 2)
-                    pm = round(
-                        today["net"]*30, 2)
-
-                    msg = (
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"  DAILY REPORT\n"
-                        f"  {date}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"{st['mode']}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"TRADES\n"
-                        f"Total  : {today['total']}\n"
-                        f"Wins   : {today['wins']}\n"
-                        f"Losses : {today['losses']}\n"
-                        f"WR     : {today['wr']}%\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"PNL\n"
-                        f"Net    : "
-                        f"{today['net']:+.4f}\n"
-                        f"Best   : "
-                        f"+{today['best']:.4f}\n"
-                        f"Worst  : "
-                        f"{today['worst']:.4f}\n"
-                        f"Fees   : "
-                        f"-{today['fees']:.4f}\n"
-                        f"Monthly: +{pm:.2f}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"CAPITAL\n"
-                        f"Start  : "
-                        f"{st['start_cap']:.2f}\n"
-                        f"Now    : "
-                        f"{st['capital']:.4f}\n"
-                        f"Growth : {growth:+.4f}\n"
-                        f"ROI    : {roi:+.2f}%\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━")
-                else:
-                    msg = (
-                        f"DAILY {date}\n"
-                        f"Koi trade nahi")
-                send_tg(msg)
-                time.sleep(70)
-        except Exception as e:
-            print(f"[DAY] {e}")
-        time.sleep(30)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MAIN ENGINE
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-def run_engine():
-
-    ex = get_exchange()
-
-    # ✅ FIXED: Balance fetch
-    print("[BAL] Fetching balance...")
-    balance = get_balance(ex)
-
-    # Balance mile ya na mile
-    # File se load karo
-    saved = load_cap()
-
-    if saved and saved > 0:
-        # File mein saved capital hai
-        capital = saved
         print(
-            f"[CAP] File se: "
-            f"{capital:.2f} USDT")
-    elif balance and balance > 0:
-        # Exchange se mila
-        capital = balance
-        print(
-            f"[CAP] Exchange se: "
-            f"{capital:.2f} USDT")
-        save_cap(capital)
-    else:
-        # Default
-        capital = 10000.0
-        print(
-            f"[CAP] Default: "
-            f"{capital:.2f} USDT")
-        save_cap(capital)
+            f"[FLOW] {signal} | "
+            f"Buy={buy_vol:.2f} | "
+            f"Sell={sell_vol:.2f} | "
+            f"Ratio={ratio:.2f}")
 
-    start_cap   = capital
-    position    = None
-    entry_price = 0.0
-    entry_time  = None
-    qty         = 0.0
-    tp_price    = 0.0
-    sl_price    = 0.0
-    cap_used    = 0.0
-    entry_fee   = 0.0
-    cd_end      = None
-    trades      = 0
-    wins        = 0
-    losses      = 0
-    net         = 0.0
-    best        = 0.0
-    worst       = 0.0
-    cycles      = 0
-
-    print(
-        f"\n[START] ✅\n"
-        f"Mode   : {MODE_NAME}\n"
-        f"Capital: {capital:.2f} USDT\n"
-        f"Symbol : {SYMBOL}\n"
-        f"TP     : {TP_PCT}%\n"
-        f"SL     : {SL_PCT}%\n")
-
-    send_tg(
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"  ETH BOT STARTED\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"{MODE_NAME}\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Capital : {capital:.2f} USDT\n"
-        f"Symbol  : {SYMBOL}\n"
-        f"Leverage: {LEVERAGE}x\n"
-        f"TP      : {TP_PCT}%\n"
-        f"SL      : {SL_PCT}%\n"
-        f"Scan    : {SCAN_SEC}s\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"Bot shuru ho gaya!\n"
-        f"Trades aana shuru honge!\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━"
-    )
-
-    while True:
-        try:
-            loop_st = time.time()
-            cycles += 1
-
-            # Price fetch
-            try:
-                ticker = ex.fetch_ticker(
-                    SYMBOL)
-                price  = float(
-                    ticker["last"])
-            except Exception:
-                time.sleep(SCAN_SEC)
-                continue
-
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # POSITION MONITOR
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            if position is not None:
-                held = round(
-                    (datetime.now() -
-                     entry_time
-                     ).total_seconds(), 1)
-
-                hit_tp = (
-                    (position == "BUY"
-                     and price >= tp_price)
-                    or
-                    (position == "SELL"
-                     and price <= tp_price))
-
-                hit_sl = (
-                    (position == "BUY"
-                     and price <= sl_price)
-                    or
-                    (position == "SELL"
-                     and price >= sl_price))
-
-                if hit_tp or hit_sl:
-                    # Close karo
-                    exit_px, exit_fee = (
-                        close_trade(
-                            ex,
-                            position,
-                            qty))
-
-                    if not exit_px:
-                        exit_px  = price
-                        exit_fee = (
-                            price * qty *
-                            TAKER_FEE)
-
-                    # PnL
-                    if position == "BUY":
-                        gross = (
-                            (exit_px -
-                             entry_price) *
-                            qty)
-                    else:
-                        gross = (
-                            (entry_price -
-                             exit_px) *
-                            qty)
-
-                    total_fee = (
-                        entry_fee +
-                        exit_fee)
-                    net_pnl = (
-                        gross - total_fee)
-
-                    capital += net_pnl
-                    net     += net_pnl
-                    trades  += 1
-
-                    if hit_tp:
-                        label = "TAKE PROFIT ✅"
-                        icon  = "🟢"
-                        wins += 1
-                        cd_end = (
-                            time.time() +
-                            CD_WIN)
-                    else:
-                        label = "STOP LOSS ❌"
-                        icon  = "🔴"
-                        losses += 1
-                        cd_end = (
-                            time.time() +
-                            CD_LOSS)
-
-                    if net_pnl > best:
-                        best = net_pnl
-                    if (worst == 0 or
-                            net_pnl < worst):
-                        worst = net_pnl
-
-                    wr = round(
-                        wins /
-                        max(1, wins+losses)
-                        * 100, 1)
-
-                    save_cap(capital)
-                    save_trade(
-                        position,
-                        entry_price,
-                        exit_px,
-                        gross,
-                        total_fee,
-                        net_pnl,
-                        capital,
-                        f"{held}s",
-                        label,
-                        trades)
-
-                    print(
-                        f"[#{trades}] "
-                        f"{label} | "
-                        f"{position} | "
-                        f"Net={net_pnl:+.4f} | "
-                        f"Cap={capital:.2f} | "
-                        f"WR={wr}%")
-
-                    send_tg(
-                        f"{icon} {label}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Trade # : {trades}\n"
-                        f"Mode    : {MODE}\n"
-                        f"Side    : {position}\n"
-                        f"Entry   : "
-                        f"{entry_price:.2f}\n"
-                        f"Exit    : "
-                        f"{exit_px:.2f}\n"
-                        f"Time    : {held}s\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Gross   : "
-                        f"{gross:+.4f} USDT\n"
-                        f"Fee     : "
-                        f"-{total_fee:.4f} USDT\n"
-                        f"NET PnL : "
-                        f"{net_pnl:+.4f} USDT\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"Capital : "
-                        f"{capital:.4f} USDT\n"
-                        f"Win Rate: {wr}%\n"
-                        f"Total   : {trades}\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━"
-                    )
-
-                    # Reset
-                    position    = None
-                    entry_price = 0.0
-                    entry_time  = None
-                    qty         = 0.0
-                    tp_price    = 0.0
-                    sl_price    = 0.0
-                    cap_used    = 0.0
-                    entry_fee   = 0.0
-
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # COOLDOWN
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            if (cd_end and
-                    time.time() < cd_end):
-                set_state(
-                    price=price,
-                    cycles=cycles)
-                elapsed = (
-                    time.time() - loop_st)
-                time.sleep(max(
-                    0,
-                    SCAN_SEC - elapsed))
-                continue
-
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            # NEW ENTRY
-            # ━━━━━━━━━━━━━━━━━━━━━━━━━━
-            if position is None:
-                signal = get_signal(price)
-
-                if signal in [
-                        "BUY", "SELL"]:
-
-                    cap_used = (
-                        capital *
-                        CAPITAL_USE / 100)
-                    qty = round(
-                        cap_used *
-                        LEVERAGE / price,
-                        3)
-                    qty = max(0.001, qty)
-
-                    fill_px, e_fee = (
-                        open_trade(
-                            ex,
-                            signal,
-                            price,
-                            qty))
-
-                    if fill_px:
-                        entry_price = fill_px
-                        entry_time  = (
-                            datetime.now())
-                        position    = signal
-                        entry_fee   = e_fee
-
-                        if signal == "BUY":
-                            tp_price = round(
-                                fill_px *
-                                (1 +
-                                 TP_PCT/100),
-                                2)
-                            sl_price = round(
-                                fill_px *
-                                (1 -
-                                 SL_PCT/100),
-                                2)
-                        else:
-                            tp_price = round(
-                                fill_px *
-                                (1 -
-                                 TP_PCT/100),
-                                2)
-                            sl_price = round(
-                                fill_px *
-                                (1 +
-                                 SL_PCT/100),
-                                2)
-
-                        exp_w = round(
-                            cap_used *
-                            LEVERAGE *
-                            TP_PCT/100, 2)
-                        exp_l = round(
-                            cap_used *
-                            LEVERAGE *
-                            SL_PCT/100, 2)
-
-                        print(
-                            f"[ENTRY] "
-                            f"{signal} | "
-                            f"{qty}@"
-                            f"{fill_px:.2f}")
-
-                        send_tg(
-                            f"🚀 ENTRY "
-                            f"#{trades+1}\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"Mode    : {MODE}\n"
-                            f"Side    : {signal}\n"
-                            f"Entry   : "
-                            f"{fill_px:.2f}\n"
-                            f"TP      : "
-                            f"{tp_price:.2f}\n"
-                            f"SL      : "
-                            f"{sl_price:.2f}\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"Capital : "
-                            f"{cap_used:.2f}\n"
-                            f"Qty     : {qty}\n"
-                            f"Exp Win : +{exp_w}\n"
-                            f"Exp Loss: -{exp_l}\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━"
-                        )
-
-            # State update
-            set_state(
-                price=price,
-                position=position,
-                entry=entry_price,
-                tp=tp_price,
-                sl=sl_price,
-                qty=qty,
-                cap_used=cap_used,
-                capital=capital,
-                start_cap=start_cap,
-                trades=trades,
-                wins=wins,
-                losses=losses,
-                net=net,
-                best=best,
-                worst=worst,
-                cycles=cycles,
-            )
-
-            if cycles % 30 == 0:
-                wr = round(
-                    wins /
-                    max(1, wins+losses)
-                    * 100, 1)
-                print(
-                    f"[C{cycles}] "
-                    f"ETH={price:.2f} | "
-                    f"Pos={position} | "
-                    f"Net={net:+.4f} | "
-                    f"T={trades} "
-                    f"WR={wr}%")
-
-            elapsed = (
-                time.time() - loop_st)
-            time.sleep(max(
-                0, SCAN_SEC - elapsed))
-
-        except Exception as e:
-            err = str(e)
-            print(f"[ERR] {err}")
-            if "429" in err:
-                time.sleep(10)
-            elif ("connection" in
-                  err.lower() or
-                  "timeout" in
-                  err.lower()):
-                try:
-                    ex = get_exchange()
-                except Exception:
-                    pass
-                time.sleep(5)
-            else:
-                time.sleep(2)
-
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  START
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-if __name__ == "__main__":
-
-    print("=" * 45)
-    print("  ETH TRADING BOT")
-    print(f"  {MODE_NAME}")
-    print("=" * 45)
-    print(f"  Symbol  : {SYMBOL}")
-    print(f"  Leverage: {LEVERAGE}x")
-    print(f"  TP      : {TP_PCT}%")
-    print(f"  SL      : {SL_PCT}%")
-    print("=" * 45)
-
-    has_key = (
-        "YAHAN" not in API_KEY and
-        len(API_KEY) > 10)
-
-    if not has_key:
-        print(
-            "\n❌ API KEY DAALO!\n"
-            "\nTestnet ke liye:\n"
-            "TESTNET_API_KEY = "
-            "'apni_testnet_key'\n"
-            "TESTNET_API_SECRET = "
-            "'apna_testnet_secret'\n")
-    else:
-        threads = [
-            threading.Thread(
-                target=run_server,
-                name="Flask",
-                daemon=True),
-            threading.Thread(
-                target=tg_worker,
-                name="Telegram",
-                daemon=True),
-            threading.Thread(
-                target=run_update,
-                name="Update",
-                daemon=True),
-            threading.Thread(
-                target=run_daily,
-                name="Daily",
-                daemon=True),
-            threading.Thread(
-                target=run_engine,
-                name="Engine",
-                daemon=True),
-        ]
-
-        for t in threads:
-            t.start()
-            print(f"[✅] {t.name}")
-            time.sleep(0.3)
-
-        print("=" * 45)
-        print(f"[✅] {MODE_NAME}")
-        print("[✅] Bot Live!")
-        print("=" * 45)
-
-        while True:
-            time.sleep(60)
+        return signal, buy_vol, sell_vol
