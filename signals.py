@@ -226,19 +226,19 @@ def signal_liquidation() -> str:
 
 
 # ─────────────────────────────────────────────
-#  SIGNAL AGGREGATOR
+#  SIGNAL AGGREGATOR  (4 signals, 2-of-4 model)
 # ─────────────────────────────────────────────
 def get_trade_signal(client) -> str:
     """
-    Run all 5 signals and apply 3-of-5 confirmation model.
+    Run 4 signals and apply 2-of-4 confirmation model.
+    Liquidation removed — testnet pe reliable data nahi aata.
     Returns: 'LONG' | 'SHORT' | 'NEUTRAL'
     """
     results = {
-        "OBI":         signal_obi(client),
-        "CVD":         signal_cvd(client),
-        "VELOCITY":    signal_velocity(),
-        "FUNDING":     signal_funding(client),
-        "LIQUIDATION": signal_liquidation(),
+        "OBI":      signal_obi(client),
+        "CVD":      signal_cvd(client),
+        "VELOCITY": signal_velocity(),
+        "FUNDING":  signal_funding(client),
     }
 
     long_count  = sum(1 for v in results.values() if v == "LONG")
