@@ -31,8 +31,8 @@ LEVERAGE      = 5
 RISK_PCT      = 0.90          # 90% of available balance per trade (TESTNET ONLY)
 
 # Take Profit & Stop Loss (as % move from entry)
-TP_PCT        = 0.004         # 0.4%  — limit order (maker rebate)
-SL_PCT        = 0.003         # 0.3%  — market order (safety)
+TP_PCT        = 0.002         # 0.2%  — limit order (maker rebate) — 5 min mein easily milta hai
+SL_PCT        = 0.0015        # 0.15% — market order (safety)
 
 # Limit order offset from best bid/ask (to ensure maker fill)
 ENTRY_OFFSET  = 0.0001        # 0.01% inside spread
@@ -42,40 +42,38 @@ ENTRY_OFFSET  = 0.0001        # 0.01% inside spread
 # ─────────────────────────────────────────────
 
 # Order Book Imbalance  (bid_vol / (bid_vol + ask_vol))
-OBI_LONG_THRESHOLD  = 0.60    # >60% bids  → bullish
-OBI_SHORT_THRESHOLD = 0.40    # <40% bids  → bearish
+OBI_LONG_THRESHOLD  = 0.55    # >55% bids  → bullish (loosened from 60%)
+OBI_SHORT_THRESHOLD = 0.45    # <45% bids  → bearish
 OBI_DEPTH_LEVELS    = 10      # top N levels to consider
 
 # Cumulative Volume Delta (CVD)
 CVD_LOOKBACK        = 50      # last N trades
-CVD_LONG_THRESHOLD  = 0.60    # buy volume > 60% → bullish
-CVD_SHORT_THRESHOLD = 0.40
+CVD_LONG_THRESHOLD  = 0.55    # buy volume > 55% → bullish (loosened from 60%)
+CVD_SHORT_THRESHOLD = 0.45
 
 # Price Velocity  (% move over last N seconds)
 VELOCITY_WINDOW_SEC = 10
-VELOCITY_LONG_MIN   =  0.05   # +0.05% → bullish
-VELOCITY_SHORT_MAX  = -0.05   # -0.05% → bearish
+VELOCITY_LONG_MIN   =  0.02   # +0.02% → bullish (loosened from 0.05%)
+VELOCITY_SHORT_MAX  = -0.02   # -0.02% → bearish
 
 # Funding Rate  (hourly %)
 FUNDING_LONG_MAX    = 0.01    # low/negative funding → ok to go long
 FUNDING_SHORT_MIN   = -0.01   # high negative funding → ok to go short
 
-# Liquidation Heatmap
-LIQ_LOOKBACK_SEC    = 60      # scan last 60s of liquidation data
-LIQ_LONG_THRESHOLD  = 0.60    # >60% liq volume was SHORTS → bullish pressure
-LIQ_SHORT_THRESHOLD = 0.40
+# NOTE: Liquidation signal REMOVED — testnet pe kaam nahi karta
+# Sirf 4 signals use ho rahe hain ab: OBI, CVD, Velocity, Funding
 
 # ─────────────────────────────────────────────
 #  SIGNAL CONFIRMATION MODEL
 # ─────────────────────────────────────────────
-SIGNALS_REQUIRED    = 3       # at least 3-of-5 signals must agree
+SIGNALS_REQUIRED    = 2       # 2-of-4 signals agree → trade lo
 
 # ─────────────────────────────────────────────
 #  BOT LOOP SETTINGS
 # ─────────────────────────────────────────────
-LOOP_INTERVAL_SEC   = 5       # how often the bot checks signals
-ORDER_TIMEOUT_SEC   = 30      # cancel unfilled limit entry after N seconds
-MAX_OPEN_TRADES     = 1       # only 1 trade at a time
+LOOP_INTERVAL_SEC   = 3       # har 3 seconds check karo
+ORDER_TIMEOUT_SEC   = 120     # limit entry ko 2 min do fill hone ke liye
+MAX_OPEN_TRADES     = 1       # ek waqt mein sirf 1 trade
 
 # ─────────────────────────────────────────────
 #  KEEP-ALIVE  (for Render + UptimeRobot)
