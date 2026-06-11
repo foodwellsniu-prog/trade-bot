@@ -1,17 +1,26 @@
 services:
-  - type: web
-    name: eth-hft-bot
-    env: python
+  - type: worker
+    name: hft-bot-ethusdt
+    runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
+    plan: free
+
     envVars:
-      - key: MODE
-        value: TESTNET
-      - key: API_KEY
-        sync: false
-      - key: API_SECRET
-        sync: false
-      - key: BOT_TOKEN
-        sync: false
-      - key: CHAT_ID
-        sync: false
+      - key: USE_TESTNET
+        value: "true"
+
+      - key: BINANCE_API_KEY
+        sync: false        # Set manually in Render dashboard
+
+      - key: BINANCE_API_SECRET
+        sync: false        # Set manually in Render dashboard
+
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false        # Set manually in Render dashboard
+
+      - key: TELEGRAM_CHAT_ID
+        sync: false        # Set manually in Render dashboard
+
+      - key: PORT
+        value: "8080"
