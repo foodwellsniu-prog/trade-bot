@@ -288,7 +288,9 @@ def main():
     sys_signal.signal(sys_signal.SIGTERM, handle_shutdown)
     sys_signal.signal(sys_signal.SIGINT,  handle_shutdown)
 
+    # Keep-alive SABSE PEHLE — Render port detect kar sake
     start_keep_alive()
+    time.sleep(2)  # Render ko port detect karne do
 
     client = create_client()
     orders.set_leverage(client)
