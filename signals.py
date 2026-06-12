@@ -1,252 +1,326 @@
-"""
-signals.py
-──────────
-Calculates 4 trading signals and returns a final direction:
-  LONG | SHORT | NEUTRAL
-
-Signals:
-  1. Order Book Imbalance  (OBI)
-  2. Cumulative Volume Delta (CVD)
-  3. Price Velocity
-  4. Funding Rate
-
-"""
-
+import json
 import time
-import logging
-from config import (
-    OBI_LONG_THRESHOLD, OBI_SHORT_THRESHOLD, OBI_DEPTH_LEVELS,
-    CVD_LOOKBACK, CVD_LONG_THRESHOLD, CVD_SHORT_THRESHOLD,
-    VELOCITY_WINDOW_SEC, VELOCITY_LONG_MIN, VELOCITY_SHORT_MAX,
-    FUNDING_LONG_MAX, FUNDING_SHORT_MIN,
-    SIGNALS_REQUIRED, SYMBOL
-)
+import threading
+import websocket
+from collections import deque
+from config import *
 
-logger = logging.getLogger(__name__)
+class SignalEngine:
 
+    def __init__(self):
+        # Order Book
+        self._ob_lock  = threading.Lock()
+        self._ob_bids  = {}
+        self._ob_asks  = {}
+        self._ob_ready = False
 
-# ─────────────────────────────────────────────
-#  1. ORDER BOOK IMBALANCE
-# ─────────────────────────────────────────────
-def signal_obi(client) -> str:
-    """
-    Fetch top N bid/ask levels and compute:
-      OBI = bid_vol / (bid_vol + ask_vol)
-    Returns: 'LONG' | 'SHORT' | 'NEUTRAL'
-    """
-    try:
-        depth = client.futures_order_book(symbol=SYMBOL, limit=OBI_DEPTH_LEVELS * 2)
+        # Trade Flow
+        self._flow_lock = threading.Lock()
+        self._flow_data = deque(maxlen=1000)
 
-        bid_vol = sum(float(b[1]) for b in depth["bids"][:OBI_DEPTH_LEVELS])
-        ask_vol = sum(float(a[1]) for a in depth["asks"][:OBI_DEPTH_LEVELS])
-        total   = bid_vol + ask_vol
+        # Price
+        self._price_lock = threading.Lock()
+        self._price_hist = deque(maxlen=200)
+        self._cur_price  = 0.0
 
-        if total == 0:
-            return "NEUTRAL"
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  PRICE
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        obi = bid_vol / total
-        logger.debug(f"OBI = {obi:.4f}")
+    def get_price(self):
+        with self._price_lock:
+            return self._cur_price
 
-        if obi >= OBI_LONG_THRESHOLD:
-            return "LONG"
-        elif obi <= OBI_SHORT_THRESHOLD:
-            return "SHORT"
-        return "NEUTRAL"
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  WEBSOCKET HANDLERS
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    except Exception as e:
-        logger.error(f"OBI signal error: {e}")
-        return "NEUTRAL"
+    def _on_ob_msg(self, ws, msg):
+        try:
+            data = json.loads(msg)
+            with self._ob_lock:
+                for b in data.get("b", []):
+                    p = float(b[0])
+                    q = float(b[1])
+                    if q == 0:
+                        self._ob_bids.pop(p, None)
+                    else:
+                        self._ob_bids[p] = q
+                for a in data.get("a", []):
+                    p = float(a[0])
+                    q = float(a[1])
+                    if q == 0:
+                        self._ob_asks.pop(p, None)
+                    else:
+                        self._ob_asks[p] = q
+                self._ob_ready = True
+        except Exception as e:
+            print(f"[OB MSG] {e}")
 
+    def _on_trade_msg(self, ws, msg):
+        try:
+            data    = json.loads(msg)
+            price   = float(data["p"])
+            qty     = float(data["q"])
+            is_sell = data["m"]
 
-# ─────────────────────────────────────────────
-#  2. CUMULATIVE VOLUME DELTA (CVD)
-# ─────────────────────────────────────────────
-def signal_cvd(client) -> str:
-    """
-    Fetch last N recent trades, compute:
-      CVD = buy_vol / total_vol
-    Returns: 'LONG' | 'SHORT' | 'NEUTRAL'
-    """
-    try:
-        trades = client.futures_recent_trades(symbol=SYMBOL, limit=CVD_LOOKBACK)
+            with self._flow_lock:
+                self._flow_data.append({
+                    "price"  : price,
+                    "qty"    : qty,
+                    "is_sell": is_sell,
+                    "time"   : time.time(),
+                })
 
-        buy_vol   = sum(float(t["qty"]) for t in trades if not t["isBuyerMaker"])
-        total_vol = sum(float(t["qty"]) for t in trades)
+            with self._price_lock:
+                self._cur_price = price
+                self._price_hist.append({
+                    "price": price,
+                    "time" : time.time(),
+                })
+        except Exception as e:
+            print(f"[TRADE MSG] {e}")
 
-        if total_vol == 0:
-            return "NEUTRAL"
+    def _start_ws(self, stream, handler, name):
+        url = f"{WS_BASE}/{stream}"
 
-        cvd_ratio = buy_vol / total_vol
-        logger.debug(f"CVD = {cvd_ratio:.4f}")
+        def run():
+            while True:
+                try:
+                    print(
+                        f"[WS] {name} "
+                        f"connecting..."
+                    )
+                    ws = websocket.WebSocketApp(
+                        url,
+                        on_message=handler,
+                        on_error=lambda w, e: print(
+                            f"[WS {name}] {e}"
+                        ),
+                        on_close=lambda w, c, m: print(
+                            f"[WS {name}] Closed"
+                        ),
+                        on_open=lambda w: print(
+                            f"[WS {name}] ✅"
+                        ),
+                    )
+                    ws.run_forever(
+                        ping_interval=20,
+                        ping_timeout=10,
+                    )
+                except Exception as e:
+                    print(f"[WS {name}] {e}")
+                print(
+                    f"[WS {name}] "
+                    f"Reconnect 3s..."
+                )
+                time.sleep(3)
 
-        if cvd_ratio >= CVD_LONG_THRESHOLD:
-            return "LONG"
-        elif cvd_ratio <= CVD_SHORT_THRESHOLD:
-            return "SHORT"
-        return "NEUTRAL"
+        t = threading.Thread(
+            target=run,
+            name=f"WS_{name}",
+            daemon=True
+        )
+        t.start()
 
-    except Exception as e:
-        logger.error(f"CVD signal error: {e}")
-        return "NEUTRAL"
+    def start_websockets(self):
+        self._start_ws(
+            stream  = f"{SYMBOL_WS}@depth@100ms",
+            handler = self._on_ob_msg,
+            name    = "OrderBook"
+        )
+        self._start_ws(
+            stream  = f"{SYMBOL_WS}@aggTrade",
+            handler = self._on_trade_msg,
+            name    = "TradeFlow"
+        )
+        print("[WS] Websockets started ✅")
 
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  ORDER BOOK SIGNAL
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# ─────────────────────────────────────────────
-#  3. PRICE VELOCITY
-# ─────────────────────────────────────────────
-# We track a small price history in memory
-_price_history: list[tuple[float, float]] = []  # [(timestamp, price), ...]
+    def _ob_signal(self):
+        with self._ob_lock:
+            if not self._ob_ready:
+                return "FLAT", 0.0
 
-def update_price_history(price: float):
-    """Call this every loop iteration to maintain price history."""
-    global _price_history
-    now = time.time()
-    _price_history.append((now, price))
-    # Keep only last VELOCITY_WINDOW_SEC * 2 seconds of data
-    cutoff = now - (VELOCITY_WINDOW_SEC * 2)
-    _price_history = [(t, p) for t, p in _price_history if t >= cutoff]
+            if not self._ob_bids or not self._ob_asks:
+                return "FLAT", 0.0
 
+            top_bids = sorted(
+                self._ob_bids.keys(),
+                reverse=True
+            )[:OB_LEVELS]
+            top_asks = sorted(
+                self._ob_asks.keys()
+            )[:OB_LEVELS]
 
-def signal_velocity() -> str:
-    """
-    Compare current price vs price N seconds ago.
-    velocity = (current - old) / old * 100  (percentage)
-    Returns: 'LONG' | 'SHORT' | 'NEUTRAL'
-    """
-    try:
-        now    = time.time()
-        cutoff = now - VELOCITY_WINDOW_SEC
+            if not top_bids or not top_asks:
+                return "FLAT", 0.0
 
-        old_prices = [(t, p) for t, p in _price_history if t <= cutoff]
-        if not old_prices or not _price_history:
-            return "NEUTRAL"
+            best_bid = top_bids[0]
+            best_ask = top_asks[0]
+            spread   = (
+                (best_ask - best_bid) /
+                best_bid * 100
+            )
 
-        old_price     = old_prices[-1][1]
-        current_price = _price_history[-1][1]
-        velocity_pct  = (current_price - old_price) / old_price * 100
+            if spread > MAX_SPREAD:
+                return "FLAT", 0.0
 
-        logger.debug(f"Price Velocity = {velocity_pct:.4f}%")
+            bid_vol = sum(
+                self._ob_bids[p]
+                for p in top_bids
+            )
+            ask_vol = sum(
+                self._ob_asks[p]
+                for p in top_asks
+            )
 
-        if velocity_pct >= VELOCITY_LONG_MIN:
-            return "LONG"
-        elif velocity_pct <= VELOCITY_SHORT_MAX:
-            return "SHORT"
-        return "NEUTRAL"
+            if ask_vol == 0:
+                return "FLAT", 0.0
 
-    except Exception as e:
-        logger.error(f"Velocity signal error: {e}")
-        return "NEUTRAL"
+            ratio = bid_vol / ask_vol
 
+            if ratio >= OB_IMBALANCE:
+                sig = "BUY"
+            elif ratio <= (1 / OB_IMBALANCE):
+                sig = "SELL"
+            else:
+                sig = "FLAT"
 
-# ─────────────────────────────────────────────
-#  4. FUNDING RATE
-# ─────────────────────────────────────────────
-def signal_funding(client) -> str:
-    """
-    Fetch current funding rate.
-    Low/negative funding  → market is short-biased → LONG signal (squeeze coming)
-    High positive funding → market is long-biased  → SHORT signal (squeeze coming)
-    Returns: 'LONG' | 'SHORT' | 'NEUTRAL'
-    """
-    try:
-        data = client.futures_funding_rate(symbol=SYMBOL, limit=1)
-        if not data:
-            return "NEUTRAL"
+            print(
+                f"[OB] {sig} | "
+                f"Bid={bid_vol:.0f} "
+                f"Ask={ask_vol:.0f} "
+                f"R={ratio:.2f}"
+            )
+            return sig, ratio
 
-        funding_rate = float(data[0]["fundingRate"])
-        logger.debug(f"Funding Rate = {funding_rate:.6f}")
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  FLOW SIGNAL
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        if funding_rate <= FUNDING_LONG_MAX:
-            return "LONG"
-        elif funding_rate >= FUNDING_SHORT_MIN:
-            return "SHORT"
-        return "NEUTRAL"
+    def _flow_signal(self):
+        with self._flow_lock:
+            if len(self._flow_data) < 5:
+                return "FLAT", 0.0
 
-    except Exception as e:
-        logger.error(f"Funding Rate signal error: {e}")
-        return "NEUTRAL"
+            now    = time.time()
+            recent = [
+                t for t in self._flow_data
+                if now - t["time"] <= 10.0
+            ]
 
+            if len(recent) < 3:
+                return "FLAT", 0.0
 
-# ─────────────────────────────────────────────
-#  5. LIQUIDATION HEATMAP
-# ─────────────────────────────────────────────
-# We collect liquidation events from the websocket stream
-# main.py feeds this buffer via add_liquidation()
-_liq_buffer: list[dict] = []  # [{"time": ts, "side": "BUY"/"SELL", "qty": float}]
+            buy_vol  = sum(
+                t["qty"] for t in recent
+                if not t["is_sell"]
+            )
+            sell_vol = sum(
+                t["qty"] for t in recent
+                if t["is_sell"]
+            )
+            total = buy_vol + sell_vol
 
+            if total == 0:
+                return "FLAT", 0.0
 
-def add_liquidation(side: str, qty: float):
-    """
-    Called by websocket handler in main.py when a liquidation event arrives.
-    side = 'BUY'  → short position was liquidated → bullish signal
-    side = 'SELL' → long  position was liquidated → bearish signal
-    """
-    _liq_buffer.append({"time": time.time(), "side": side, "qty": qty})
+            buy_pct = buy_vol / total * 100
 
+            if buy_pct >= FLOW_PCT:
+                sig = "BUY"
+            elif buy_pct <= (100 - FLOW_PCT):
+                sig = "SELL"
+            else:
+                sig = "FLAT"
 
-def signal_liquidation() -> str:
-    """
-    Analyse recent liquidations:
-      short_liq_vol / total_liq_vol > threshold → LONG  (shorts being wiped)
-      long_liq_vol  / total_liq_vol > threshold → SHORT (longs being wiped)
-    Returns: 'LONG' | 'SHORT' | 'NEUTRAL'
-    """
-    try:
-        now    = time.time()
-        cutoff = now - LIQ_LOOKBACK_SEC
+            print(
+                f"[FLOW] {sig} | "
+                f"Buy={buy_pct:.1f}%"
+            )
+            return sig, buy_pct
 
-        recent = [l for l in _liq_buffer if l["time"] >= cutoff]
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  VELOCITY SIGNAL
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-        # Clean up old entries
-        _liq_buffer[:] = recent
+    def _vel_signal(self):
+        with self._price_lock:
+            if len(self._price_hist) < 3:
+                return "FLAT", 0.0
 
-        if not recent:
-            return "NEUTRAL"
+            now    = time.time()
+            recent = [
+                p for p in self._price_hist
+                if now - p["time"] <= 5.0
+            ]
 
-        # BUY-side liquidation = SHORT positions were liquidated → bullish
-        short_liq_vol = sum(l["qty"] for l in recent if l["side"] == "BUY")
-        long_liq_vol  = sum(l["qty"] for l in recent if l["side"] == "SELL")
-        total_vol     = short_liq_vol + long_liq_vol
+            if len(recent) < 2:
+                return "FLAT", 0.0
 
-        if total_vol == 0:
-            return "NEUTRAL"
+            first  = recent[0]["price"]
+            last   = recent[-1]["price"]
 
-        short_ratio = short_liq_vol / total_vol
-        logger.debug(f"Liquidation short_ratio = {short_ratio:.4f}")
+            if first == 0:
+                return "FLAT", 0.0
 
-        if short_ratio >= LIQ_LONG_THRESHOLD:
-            return "LONG"
-        elif short_ratio <= LIQ_SHORT_THRESHOLD:
-            return "SHORT"
-        return "NEUTRAL"
+            change = (last - first) / first * 100
 
-    except Exception as e:
-        logger.error(f"Liquidation signal error: {e}")
-        return "NEUTRAL"
+            if change >= VEL_THRESHOLD:
+                sig = "BUY"
+            elif change <= -VEL_THRESHOLD:
+                sig = "SELL"
+            else:
+                sig = "FLAT"
 
+            print(
+                f"[VEL] {sig} | "
+                f"Change={change:.4f}%"
+            )
+            return sig, change
 
-# ─────────────────────────────────────────────
-#  SIGNAL AGGREGATOR  (4 signals, 2-of-4 model)
-# ─────────────────────────────────────────────
-def get_trade_signal(client) -> str:
-    """
-    Run 4 signals and apply 2-of-4 confirmation model.
-    Liquidation removed — testnet pe reliable data nahi aata.
-    Returns: 'LONG' | 'SHORT' | 'NEUTRAL'
-    """
-    results = {
-        "OBI":      signal_obi(client),
-        "CVD":      signal_cvd(client),
-        "VELOCITY": signal_velocity(),
-        "FUNDING":  signal_funding(client),
-    }
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    #  COMBINED - LOOSE 1/3 RULE
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    long_count  = sum(1 for v in results.values() if v == "LONG")
-    short_count = sum(1 for v in results.values() if v == "SHORT")
+    def get_signal(self):
+        """
+        LOOSE Signal:
+        1/3 signal = Trade lo
+        Zyada trades = 100-110/day
+        """
+        ob_sig,   _ = self._ob_signal()
+        flow_sig, _ = self._flow_signal()
+        vel_sig,  _ = self._vel_signal()
 
-    logger.info(f"Signals → {results} | LONG={long_count} SHORT={short_count}")
+        signals    = [ob_sig, flow_sig, vel_sig]
+        buy_count  = signals.count("BUY")
+        sell_count = signals.count("SELL")
 
-    if long_count >= SIGNALS_REQUIRED:
-        return "LONG"
-    elif short_count >= SIGNALS_REQUIRED:
-        return "SHORT"
-    return "NEUTRAL"
+        print(
+            f"[SIG] OB={ob_sig} "
+            f"FL={flow_sig} "
+            f"VL={vel_sig} | "
+            f"B={buy_count} S={sell_count}"
+        )
+
+        # 1/3 = Loose (zyada trades)
+        if buy_count >= 1 and sell_count == 0:
+            return (
+                "BUY", buy_count,
+                ob_sig, flow_sig, vel_sig
+            )
+        elif sell_count >= 1 and buy_count == 0:
+            return (
+                "SELL", sell_count,
+                ob_sig, flow_sig, vel_sig
+            )
+        else:
+            return (
+                "FLAT", 0,
+                ob_sig, flow_sig, vel_sig
+            )
