@@ -42,19 +42,19 @@ ENTRY_OFFSET  = 0.0001        # 0.01% inside spread
 # ─────────────────────────────────────────────
 
 # Order Book Imbalance  (bid_vol / (bid_vol + ask_vol))
-OBI_LONG_THRESHOLD  = 0.55    # >55% bids  → bullish (loosened from 60%)
-OBI_SHORT_THRESHOLD = 0.45    # <45% bids  → bearish
+OBI_LONG_THRESHOLD  = 0.52    # >55% bids  → bullish (loosened from 60%)
+OBI_SHORT_THRESHOLD = 0.48    # <45% bids  → bearish
 OBI_DEPTH_LEVELS    = 10      # top N levels to consider
 
 # Cumulative Volume Delta (CVD)
 CVD_LOOKBACK        = 50      # last N trades
-CVD_LONG_THRESHOLD  = 0.55    # buy volume > 55% → bullish (loosened from 60%)
-CVD_SHORT_THRESHOLD = 0.45
+CVD_LONG_THRESHOLD  = 0.52    # buy volume > 55% → bullish (loosened from 60%)
+CVD_SHORT_THRESHOLD = 0.48
 
 # Price Velocity  (% move over last N seconds)
 VELOCITY_WINDOW_SEC = 10
-VELOCITY_LONG_MIN   =  0.02   # +0.02% → bullish (loosened from 0.05%)
-VELOCITY_SHORT_MAX  = -0.02   # -0.02% → bearish
+VELOCITY_LONG_MIN   =  0.01   # +0.02% → bullish (loosened from 0.05%)
+VELOCITY_SHORT_MAX  = -0.01   # -0.02% → bearish
 
 # Funding Rate  (hourly %)
 FUNDING_LONG_MAX    = 0.01    # low/negative funding → ok to go long
