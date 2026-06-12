@@ -1,7 +1,7 @@
 """
 signals.py
 ──────────
-Calculates 5 trading signals and returns a final direction:
+Calculates 4 trading signals and returns a final direction:
   LONG | SHORT | NEUTRAL
 
 Signals:
@@ -9,7 +9,7 @@ Signals:
   2. Cumulative Volume Delta (CVD)
   3. Price Velocity
   4. Funding Rate
-  5. Liquidation Heatmap
+
 """
 
 import time
@@ -19,7 +19,6 @@ from config import (
     CVD_LOOKBACK, CVD_LONG_THRESHOLD, CVD_SHORT_THRESHOLD,
     VELOCITY_WINDOW_SEC, VELOCITY_LONG_MIN, VELOCITY_SHORT_MAX,
     FUNDING_LONG_MAX, FUNDING_SHORT_MIN,
-    LIQ_LOOKBACK_SEC, LIQ_LONG_THRESHOLD, LIQ_SHORT_THRESHOLD,
     SIGNALS_REQUIRED, SYMBOL
 )
 
