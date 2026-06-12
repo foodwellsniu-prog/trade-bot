@@ -1,81 +1,69 @@
 import os
 
-# ─────────────────────────────────────────────
-#  ENVIRONMENT TOGGLE
-# ─────────────────────────────────────────────
-USE_TESTNET = os.getenv("USE_TESTNET", "true").lower() == "true"
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  MODE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MODE    = os.environ.get("MODE", "TESTNET")
+IS_TEST = MODE == "TESTNET"
 
-# ─────────────────────────────────────────────
-#  BINANCE API CREDENTIALS (from Render env vars)
-# ─────────────────────────────────────────────
-BINANCE_API_KEY    = os.getenv("BINANCE_API_KEY", "")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "")
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  API KEYS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+API_KEY    = os.environ.get("API_KEY", "")
+API_SECRET = os.environ.get("API_SECRET", "")
+BOT_TOKEN  = os.environ.get("BOT_TOKEN", "")
+CHAT_ID    = os.environ.get("CHAT_ID", "")
 
-BINANCE_BASE_URL = (
-    "https://testnet.binancefuture.com"
-    if USE_TESTNET
-    else "https://fapi.binance.com"
-)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  URLs
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if IS_TEST:
+    BASE_URL = "https://testnet.binancefuture.com"
+    WS_BASE  = "wss://stream.binancefuture.com/ws"
+else:
+    BASE_URL = "https://fapi.binance.com"
+    WS_BASE  = "wss://fstream.binance.com/ws"
 
-# ─────────────────────────────────────────────
-#  TELEGRAM
-# ─────────────────────────────────────────────
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  TRADING
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SYMBOL      = "ETHUSDT"
+SYMBOL_WS   = "ethusdt"
+CAPITAL     = 10000.0
+CAPITAL_PCT = 90
+LEVERAGE    = 10
+TP_PCT      = 0.12
+SL_PCT      = 0.08
+MAX_HOLD    = 840      # 14 min = 840 sec
 
-# ─────────────────────────────────────────────
-#  TRADING PARAMETERS
-# ─────────────────────────────────────────────
-SYMBOL        = "ETHUSDT"
-LEVERAGE      = 5
-RISK_PCT      = 0.90          # 90% of available balance per trade (TESTNET ONLY)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  FEES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MAKER_FEE = 0.0002
+TAKER_FEE = 0.0005
 
-# Take Profit & Stop Loss (as % move from entry)
-TP_PCT        = 0.002         # 0.2%  — limit order (maker rebate) — 5 min mein easily milta hai
-SL_PCT        = 0.0015        # 0.15% — market order (safety)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  SIGNALS - LOOSE (Zyada trades)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OB_LEVELS     = 10
+OB_IMBALANCE  = 1.2   # Loose
+FLOW_PCT      = 55    # Loose
+VEL_THRESHOLD = 0.005 # Loose
+MAX_SPREAD    = 0.10  # Loose
 
-# Limit order offset from best bid/ask (to ensure maker fill)
-ENTRY_OFFSET  = 0.0001        # 0.01% inside spread
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  COOLDOWN
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COOLDOWN_WIN  = 5
+COOLDOWN_LOSS = 10
 
-# ─────────────────────────────────────────────
-#  SIGNAL THRESHOLDS
-# ─────────────────────────────────────────────
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  UPDATE
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+UPDATE_MIN = 30
 
-# Order Book Imbalance  (bid_vol / (bid_vol + ask_vol))
-OBI_LONG_THRESHOLD  = 0.52    # >55% bids  → bullish (loosened from 60%)
-OBI_SHORT_THRESHOLD = 0.48    # <45% bids  → bearish
-OBI_DEPTH_LEVELS    = 10      # top N levels to consider
-
-# Cumulative Volume Delta (CVD)
-CVD_LOOKBACK        = 50      # last N trades
-CVD_LONG_THRESHOLD  = 0.52    # buy volume > 55% → bullish (loosened from 60%)
-CVD_SHORT_THRESHOLD = 0.48
-
-# Price Velocity  (% move over last N seconds)
-VELOCITY_WINDOW_SEC = 10
-VELOCITY_LONG_MIN   =  0.01   # +0.02% → bullish (loosened from 0.05%)
-VELOCITY_SHORT_MAX  = -0.01   # -0.02% → bearish
-
-# Funding Rate  (hourly %)
-FUNDING_LONG_MAX    = 0.01    # low/negative funding → ok to go long
-FUNDING_SHORT_MIN   = -0.01   # high negative funding → ok to go short
-
-# NOTE: Liquidation signal REMOVED — testnet pe kaam nahi karta
-# Sirf 4 signals use ho rahe hain ab: OBI, CVD, Velocity, Funding
-
-# ─────────────────────────────────────────────
-#  SIGNAL CONFIRMATION MODEL
-# ─────────────────────────────────────────────
-SIGNALS_REQUIRED    = 2       # 2-of-4 signals agree → trade lo
-
-# ─────────────────────────────────────────────
-#  BOT LOOP SETTINGS
-# ─────────────────────────────────────────────
-LOOP_INTERVAL_SEC   = 3       # har 3 seconds check karo
-ORDER_TIMEOUT_SEC   = 120     # limit entry ko 2 min do fill hone ke liye
-MAX_OPEN_TRADES     = 1       # ek waqt mein sirf 1 trade
-
-# ─────────────────────────────────────────────
-#  KEEP-ALIVE  (for Render + UptimeRobot)
-# ─────────────────────────────────────────────
-KEEP_ALIVE_PORT     = int(os.getenv("PORT", 8080))
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  FILES
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CAP_FILE  = "capital_eth.txt"
+HIST_FILE = "history_eth.json"
