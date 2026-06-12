@@ -12,7 +12,6 @@ Changes in v5.1:
 import time
 import logging
 import threading
-import signal as sys_signal
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from binance.client import Client
@@ -268,12 +267,6 @@ def check_and_manage_trade(client, filters):
 _running = True
 
 
-def handle_shutdown(signum, frame):
-    global _running
-    logger.info("Shutdown signal received...")
-    _running = False
-
-
 # ─────────────────────────────────────────────
 #  MAIN ENTRY POINT
 # ─────────────────────────────────────────────
@@ -284,9 +277,6 @@ def main():
     logger.info(f"HFT Bot v5.1 Starting — {'TESTNET' if config.USE_TESTNET else 'LIVE'}")
     logger.info(f"Symbol: {config.SYMBOL} | Leverage: {config.LEVERAGE}x")
     logger.info("=" * 50)
-
-    sys_signal.signal(sys_signal.SIGTERM, handle_shutdown)
-    sys_signal.signal(sys_signal.SIGINT,  handle_shutdown)
 
     # Keep-alive SABSE PEHLE — Render port detect kar sake
     start_keep_alive()
